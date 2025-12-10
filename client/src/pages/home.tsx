@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/layout";
 import GamerCard from "@/components/gamer-card";
 import CommunityCard from "@/components/community-card";
@@ -8,22 +9,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-import { Search, Calendar, Zap, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Calendar, Zap } from "lucide-react";
 import { Link } from "wouter";
 
-// For demo purposes - in a real app this would come from auth
-const CURRENT_USER_ID = "a476ca41-1b48-4406-aeb2-034f85984217"; // NeoGamer2077
-
 export default function Home() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("feed");
 
   const { data: friends, isLoading: friendsLoading } = useQuery({
-    queryKey: ["friends", CURRENT_USER_ID],
+    queryKey: ["friends", user?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/users/${CURRENT_USER_ID}/friends`);
+      if (!user?.id) return [];
+      const response = await fetch(`/api/users/${user.id}/friends`);
       if (!response.ok) return [];
       return response.json();
     },
+    enabled: !!user?.id,
   });
 
   const { data: communities, isLoading: communitiesLoading } = useQuery({

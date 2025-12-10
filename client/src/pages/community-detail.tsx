@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -10,9 +11,8 @@ import { ArrowLeft, Users, Lock, MessageSquare, Calendar, Hash } from "lucide-re
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-const CURRENT_USER_ID = "a476ca41-1b48-4406-aeb2-034f85984217"; // NeoGamer2077
-
 export default function CommunityDetail({ params }: { params: { id: string } }) {
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [newPostContent, setNewPostContent] = useState("");
   const queryClient = useQueryClient();
@@ -27,12 +27,14 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
   });
 
   const { data: isMember } = useQuery({
-    queryKey: ["membership", params.id, CURRENT_USER_ID],
+    queryKey: ["membership", params.id, user?.id],
     queryFn: async () => {
-      const response = await fetch(`/api/communities/${params.id}/is-member/${CURRENT_USER_ID}`);
+      if (!user?.id) return false;
+      const response = await fetch(`/api/communities/${params.id}/is-member/${user.id}`);
       const data = await response.json();
       return data.isMember;
     },
+    enabled: !!user?.id,
   });
 
   const { data: posts } = useQuery({
@@ -46,16 +48,17 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
 
   const joinMutation = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Not authenticated");
       const response = await fetch(`/api/communities/${params.id}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: CURRENT_USER_ID }),
+        body: JSON.stringify({ userId: user.id }),
       });
       if (!response.ok) throw new Error("Failed to join");
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["membership", params.id, CURRENT_USER_ID] });
+      queryClient.invalidateQueries({ queryKey: ["membership", params.id, user?.id] });
       queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
       toast.success("Joined community successfully!");
     },
@@ -63,15 +66,16 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
 
   const leaveMutation = useMutation({
     mutationFn: async () => {
+      if (!user?.id) throw new Error("Not authenticated");
       const response = await fetch(`/api/communities/${params.id}/leave`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: CURRENT_USER_ID }),
+        body: JSON.stringify({ userId: user.id }),
       });
       if (!response.ok) throw new Error("Failed to leave");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["membership", params.id, CURRENT_USER_ID] });
+      queryClient.invalidateQueries({ queryKey: ["membership", params.id, user?.id] });
       queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
       toast.success("Left community");
     },
@@ -79,12 +83,13 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
 
   const postMutation = useMutation({
     mutationFn: async (content: string) => {
+      if (!user?.id) throw new Error("Not authenticated");
       const response = await fetch("/api/posts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           communityId: params.id,
-          userId: CURRENT_USER_ID,
+          userId: user.id,
           content,
         }),
       });
