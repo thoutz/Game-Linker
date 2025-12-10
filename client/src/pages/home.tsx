@@ -34,14 +34,14 @@ export default function Home() {
       </header>
 
       <Tabs defaultValue="feed" className="space-y-6" onValueChange={setActiveTab}>
-        <TabsList className="bg-card/50 backdrop-blur p-1 border border-border/50 w-full justify-start overflow-x-auto">
-          <TabsTrigger value="feed" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+        <TabsList className="bg-card/50 backdrop-blur p-1 border border-border/50 w-full justify-start overflow-x-auto no-scrollbar">
+          <TabsTrigger value="feed" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary shrink-0">
             <Zap className="w-4 h-4 mr-2" /> Activity Feed
           </TabsTrigger>
-          <TabsTrigger value="communities" className="data-[state=active]:bg-accent/20 data-[state=active]:text-accent">
+          <TabsTrigger value="communities" className="data-[state=active]:bg-accent/20 data-[state=active]:text-accent shrink-0">
             Communities
           </TabsTrigger>
-          <TabsTrigger value="nearby" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-500">
+          <TabsTrigger value="nearby" className="data-[state=active]:bg-green-500/20 data-[state=active]:text-green-500 shrink-0">
             Nearby Gamers
           </TabsTrigger>
         </TabsList>

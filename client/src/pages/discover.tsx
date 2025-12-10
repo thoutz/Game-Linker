@@ -17,12 +17,12 @@ export default function Discover() {
         </div>
 
         {/* Categories */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
           {["All", "FPS", "RPG", "MMO", "Strategy", "Co-op", "VR"].map((cat) => (
             <Badge 
               key={cat} 
               variant="outline" 
-              className="px-4 py-2 rounded-full text-sm cursor-pointer hover:bg-primary/20 hover:text-primary hover:border-primary/50 transition-all"
+              className="px-4 py-2 rounded-full text-sm cursor-pointer hover:bg-primary/20 hover:text-primary hover:border-primary/50 transition-all shrink-0"
             >
               {cat}
             </Badge>
