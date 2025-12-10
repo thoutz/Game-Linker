@@ -34,7 +34,7 @@ export default function Home() {
       </header>
 
       <Tabs defaultValue="feed" className="space-y-6" onValueChange={setActiveTab}>
-        <TabsList className="inline-flex h-9 items-center rounded-lg text-muted-foreground bg-card/50 backdrop-blur p-1 border border-border/50 w-full justify-start overflow-x-auto no-scrollbar text-center">
+        <TabsList className="inline-flex h-9 items-center rounded-lg text-muted-foreground bg-card/50 backdrop-blur p-1 border border-border/50 w-full justify-center overflow-x-auto no-scrollbar">
           <TabsTrigger value="feed" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary shrink-0">
             <Zap className="w-4 h-4 mr-2" /> Activity Feed
           </TabsTrigger>
