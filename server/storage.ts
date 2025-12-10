@@ -2,6 +2,7 @@ import { db } from "../db";
 import { 
   type User, 
   type InsertUser, 
+  type UpsertUser,
   type Community,
   type InsertCommunity,
   type Post,
@@ -21,7 +22,7 @@ import {
   users,
   communities,
   posts,
-  sessions,
+  gamingSessions,
   messages,
   friendships,
   communityMembers,
@@ -31,18 +32,16 @@ import {
 import { eq, and, or, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
-  // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
   
-  // Friends
   getFriends(userId: string): Promise<User[]>;
   addFriend(friendship: InsertFriendship): Promise<Friendship>;
   removeFriend(userId: string, friendId: string): Promise<void>;
   
-  // Communities
   getCommunities(): Promise<Community[]>;
   getCommunity(id: string): Promise<Community | undefined>;
   createCommunity(community: InsertCommunity): Promise<Community>;
@@ -51,28 +50,23 @@ export interface IStorage {
   leaveCommunity(communityId: string, userId: string): Promise<void>;
   isMember(communityId: string, userId: string): Promise<boolean>;
   
-  // Posts
   getPosts(communityId: string): Promise<(Post & { user: User })[]>;
   createPost(post: InsertPost): Promise<Post>;
   
-  // Sessions
   getSessions(): Promise<(Session & { creator: User })[]>;
   getSession(id: string): Promise<Session | undefined>;
   createSession(session: InsertSession): Promise<Session>;
   
-  // Messages
   getConversation(userId: string, otherUserId: string): Promise<Message[]>;
   sendMessage(message: InsertMessage): Promise<Message>;
   getRecentChats(userId: string): Promise<{ user: User; lastMessage: Message }[]>;
   
-  // Games
   getGames(): Promise<Game[]>;
   addUserGame(userGame: InsertUserGame): Promise<UserGame>;
   getUserGames(userId: string): Promise<(UserGame & { game: Game })[]>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // Users
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -89,29 +83,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
-    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    const [user] = await db.update(users).set({ ...data, updatedAt: new Date() }).where(eq(users.id, id)).returning();
     return user;
   }
 
-  // Friends
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
   async getFriends(userId: string): Promise<User[]> {
     const result = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        password: users.password,
-        email: users.email,
-        avatar: users.avatar,
-        bio: users.bio,
-        status: users.status,
-        statusText: users.statusText,
-        createdAt: users.createdAt,
-      })
+      .select()
       .from(friendships)
       .innerJoin(users, eq(friendships.friendId, users.id))
       .where(eq(friendships.userId, userId));
     
-    return result;
+    return result.map(r => r.users);
   }
 
   async addFriend(friendship: InsertFriendship): Promise<Friendship> {
@@ -128,7 +126,6 @@ export class DatabaseStorage implements IStorage {
     );
   }
 
-  // Communities
   async getCommunities(): Promise<Community[]> {
     return db.select().from(communities).orderBy(desc(communities.createdAt));
   }
@@ -145,22 +142,12 @@ export class DatabaseStorage implements IStorage {
 
   async getCommunityMembers(communityId: string): Promise<User[]> {
     const result = await db
-      .select({
-        id: users.id,
-        username: users.username,
-        password: users.password,
-        email: users.email,
-        avatar: users.avatar,
-        bio: users.bio,
-        status: users.status,
-        statusText: users.statusText,
-        createdAt: users.createdAt,
-      })
+      .select()
       .from(communityMembers)
       .innerJoin(users, eq(communityMembers.userId, users.id))
       .where(eq(communityMembers.communityId, communityId));
     
-    return result;
+    return result.map(r => r.users);
   }
 
   async joinCommunity(membership: InsertCommunityMember): Promise<CommunityMember> {
@@ -190,33 +177,15 @@ export class DatabaseStorage implements IStorage {
     return !!result;
   }
 
-  // Posts
   async getPosts(communityId: string): Promise<(Post & { user: User })[]> {
     const result = await db
-      .select({
-        id: posts.id,
-        communityId: posts.communityId,
-        userId: posts.userId,
-        content: posts.content,
-        createdAt: posts.createdAt,
-        user: {
-          id: users.id,
-          username: users.username,
-          password: users.password,
-          email: users.email,
-          avatar: users.avatar,
-          bio: users.bio,
-          status: users.status,
-          statusText: users.statusText,
-          createdAt: users.createdAt,
-        }
-      })
+      .select()
       .from(posts)
       .innerJoin(users, eq(posts.userId, users.id))
       .where(eq(posts.communityId, communityId))
       .orderBy(desc(posts.createdAt));
     
-    return result;
+    return result.map(r => ({ ...r.posts, user: r.users }));
   }
 
   async createPost(post: InsertPost): Promise<Post> {
@@ -224,48 +193,26 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // Sessions
   async getSessions(): Promise<(Session & { creator: User })[]> {
     const result = await db
-      .select({
-        id: sessions.id,
-        title: sessions.title,
-        game: sessions.game,
-        description: sessions.description,
-        scheduledFor: sessions.scheduledFor,
-        slotsNeeded: sessions.slotsNeeded,
-        createdBy: sessions.createdBy,
-        createdAt: sessions.createdAt,
-        creator: {
-          id: users.id,
-          username: users.username,
-          password: users.password,
-          email: users.email,
-          avatar: users.avatar,
-          bio: users.bio,
-          status: users.status,
-          statusText: users.statusText,
-          createdAt: users.createdAt,
-        }
-      })
-      .from(sessions)
-      .innerJoin(users, eq(sessions.createdBy, users.id))
-      .orderBy(sessions.scheduledFor);
+      .select()
+      .from(gamingSessions)
+      .innerJoin(users, eq(gamingSessions.createdBy, users.id))
+      .orderBy(gamingSessions.scheduledFor);
     
-    return result;
+    return result.map(r => ({ ...r.gaming_sessions, creator: r.users }));
   }
 
   async getSession(id: string): Promise<Session | undefined> {
-    const [session] = await db.select().from(sessions).where(eq(sessions.id, id));
+    const [session] = await db.select().from(gamingSessions).where(eq(gamingSessions.id, id));
     return session;
   }
 
   async createSession(session: InsertSession): Promise<Session> {
-    const [result] = await db.insert(sessions).values(session).returning();
+    const [result] = await db.insert(gamingSessions).values(session).returning();
     return result;
   }
 
-  // Messages
   async getConversation(userId: string, otherUserId: string): Promise<Message[]> {
     return db
       .select()
@@ -308,24 +255,8 @@ export class DatabaseStorage implements IStorage {
 
     const result = await db
       .select({
-        user: {
-          id: users.id,
-          username: users.username,
-          password: users.password,
-          email: users.email,
-          avatar: users.avatar,
-          bio: users.bio,
-          status: users.status,
-          statusText: users.statusText,
-          createdAt: users.createdAt,
-        },
-        lastMessage: {
-          id: messages.id,
-          senderId: messages.senderId,
-          receiverId: messages.receiverId,
-          content: messages.content,
-          createdAt: messages.createdAt,
-        }
+        user: users,
+        lastMessage: messages,
       })
       .from(subquery)
       .innerJoin(users, eq(users.id, subquery.otherUserId))
@@ -344,7 +275,6 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  // Games
   async getGames(): Promise<Game[]> {
     return db.select().from(games);
   }
@@ -356,23 +286,12 @@ export class DatabaseStorage implements IStorage {
 
   async getUserGames(userId: string): Promise<(UserGame & { game: Game })[]> {
     const result = await db
-      .select({
-        id: userGames.id,
-        userId: userGames.userId,
-        gameId: userGames.gameId,
-        rank: userGames.rank,
-        hoursPlayed: userGames.hoursPlayed,
-        game: {
-          id: games.id,
-          name: games.name,
-          icon: games.icon,
-        }
-      })
+      .select()
       .from(userGames)
       .innerJoin(games, eq(userGames.gameId, games.id))
       .where(eq(userGames.userId, userId));
     
-    return result;
+    return result.map(r => ({ ...r.user_games, game: r.games }));
   }
 }
 

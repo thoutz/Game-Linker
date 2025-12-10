@@ -1,35 +1,64 @@
 import { QRCodeSVG } from "qrcode.react";
+import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Share2, Edit2, Copy, Check, Settings, Trophy, Clock } from "lucide-react";
+import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut } from "lucide-react";
 import { useState } from "react";
 import { motion } from "framer-motion";
 
 export default function Profile() {
+  const { user, isLoading } = useAuth();
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
-  const username = "NeoGamer2077";
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(username);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (user?.username) {
+      navigator.clipboard.writeText(user.username);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="max-w-3xl mx-auto space-y-8 animate-pulse">
+          <div className="h-48 bg-card/30 rounded-2xl" />
+          <div className="h-32 bg-card/30 rounded-2xl" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Layout>
+        <div className="max-w-3xl mx-auto text-center py-16">
+          <h1 className="text-3xl font-display font-bold mb-4">Sign in to view your profile</h1>
+          <p className="text-muted-foreground mb-8">Create an account or sign in to start connecting with other gamers.</p>
+          <a href="/api/login">
+            <Button className="bg-primary">Sign In</Button>
+          </a>
+        </div>
+      </Layout>
+    );
+  }
+
+  const username = user.username;
+  const displayName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : username;
+  const avatarUrl = user.profileImageUrl || user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
 
   return (
     <Layout>
       <div className="max-w-3xl mx-auto space-y-8">
-        {/* Profile Header */}
         <div className="relative">
-          {/* Banner */}
           <div className="h-48 w-full rounded-2xl overflow-hidden bg-gradient-to-r from-primary/20 via-purple-500/20 to-accent/20 border border-border/50">
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-20 mix-blend-overlay" />
           </div>
           
-          {/* Avatar & Info */}
           <div className="px-6 relative flex flex-col md:flex-row items-end md:items-center gap-6 -mt-12">
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
@@ -37,8 +66,8 @@ export default function Profile() {
               className="relative"
             >
               <Avatar className="w-32 h-32 border-4 border-background shadow-xl">
-                <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=NeoGamer" />
-                <AvatarFallback>NG</AvatarFallback>
+                <AvatarImage src={avatarUrl} className="object-cover" />
+                <AvatarFallback>{username.substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div className="absolute bottom-2 right-2 bg-background p-1.5 rounded-full shadow-sm border border-border">
                 <Edit2 className="w-4 h-4 text-muted-foreground" />
@@ -46,9 +75,9 @@ export default function Profile() {
             </motion.div>
             
             <div className="flex-1 pb-2">
-              <h1 className="text-3xl font-display font-bold">{username}</h1>
+              <h1 className="text-3xl font-display font-bold">{displayName}</h1>
               <p className="text-muted-foreground flex items-center gap-2">
-                Level 42 • DPS Main • <span className="text-green-500">Online</span>
+                @{username} • {user.bio || "Gamer"} • <span className="text-green-500">Online</span>
               </p>
             </div>
 
@@ -57,14 +86,15 @@ export default function Profile() {
                 <Share2 className="w-4 h-4 mr-2" />
                 Share Profile
               </Button>
-              <Button variant="outline" size="icon">
-                <Settings className="w-4 h-4" />
-              </Button>
+              <a href="/api/logout">
+                <Button variant="outline" size="icon" title="Sign out">
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </a>
             </div>
           </div>
         </div>
 
-        {/* QR Code Section */}
         {showQR && (
           <motion.div 
             initial={{ height: 0, opacity: 0 }}
@@ -89,7 +119,6 @@ export default function Profile() {
           </motion.div>
         )}
 
-        {/* Stats & Games */}
         <Tabs defaultValue="games" className="w-full">
           <TabsList className="bg-card/50 p-1 w-full justify-start">
             <TabsTrigger value="games">My Games</TabsTrigger>

@@ -1,7 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertCommunitySchema, insertPostSchema, insertSessionSchema, insertMessageSchema, insertFriendshipSchema, insertCommunityMemberSchema } from "@shared/schema";
+import { setupAuth, isAuthenticated } from "./replitAuth";
+import { insertCommunitySchema, insertPostSchema, insertSessionSchema, insertMessageSchema, insertFriendshipSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(
@@ -9,59 +10,57 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Users
+  await setupAuth(app);
+
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
   app.get("/api/users/:id", async (req, res) => {
     try {
       const user = await storage.getUser(req.params.id);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to get user" });
     }
   });
 
-  app.post("/api/users", async (req, res) => {
+  app.patch("/api/users/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const validatedData = insertUserSchema.parse(req.body);
-      const user = await storage.createUser(validatedData);
-      const { password, ...userWithoutPassword } = user;
-      res.status(201).json(userWithoutPassword);
-    } catch (error: any) {
-      if (error.name === "ZodError") {
-        return res.status(400).json({ error: fromZodError(error).message });
+      const userId = req.user.claims.sub;
+      if (userId !== req.params.id) {
+        return res.status(403).json({ error: "Forbidden" });
       }
-      res.status(500).json({ error: "Failed to create user" });
-    }
-  });
-
-  app.patch("/api/users/:id", async (req, res) => {
-    try {
       const user = await storage.updateUser(req.params.id, req.body);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
-      const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json(user);
     } catch (error) {
       res.status(500).json({ error: "Failed to update user" });
     }
   });
 
-  // Friends
   app.get("/api/users/:id/friends", async (req, res) => {
     try {
       const friends = await storage.getFriends(req.params.id);
-      const friendsWithoutPasswords = friends.map(({ password, ...friend }) => friend);
-      res.json(friendsWithoutPasswords);
+      res.json(friends);
     } catch (error) {
       res.status(500).json({ error: "Failed to get friends" });
     }
   });
 
-  app.post("/api/friendships", async (req, res) => {
+  app.post("/api/friendships", isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertFriendshipSchema.parse(req.body);
       const friendship = await storage.addFriend(validatedData);
@@ -74,7 +73,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/friendships", async (req, res) => {
+  app.delete("/api/friendships", isAuthenticated, async (req, res) => {
     try {
       const { userId, friendId } = req.body;
       await storage.removeFriend(userId, friendId);
@@ -84,7 +83,6 @@ export async function registerRoutes(
     }
   });
 
-  // Communities
   app.get("/api/communities", async (req, res) => {
     try {
       const communities = await storage.getCommunities();
@@ -106,7 +104,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/communities", async (req, res) => {
+  app.post("/api/communities", isAuthenticated, async (req: any, res) => {
     try {
       const validatedData = insertCommunitySchema.parse(req.body);
       const community = await storage.createCommunity(validatedData);
@@ -122,16 +120,15 @@ export async function registerRoutes(
   app.get("/api/communities/:id/members", async (req, res) => {
     try {
       const members = await storage.getCommunityMembers(req.params.id);
-      const membersWithoutPasswords = members.map(({ password, ...member }) => member);
-      res.json(membersWithoutPasswords);
+      res.json(members);
     } catch (error) {
       res.status(500).json({ error: "Failed to get members" });
     }
   });
 
-  app.post("/api/communities/:id/join", async (req, res) => {
+  app.post("/api/communities/:id/join", isAuthenticated, async (req: any, res) => {
     try {
-      const { userId } = req.body;
+      const userId = req.user.claims.sub;
       const membership = await storage.joinCommunity({
         communityId: req.params.id,
         userId,
@@ -142,9 +139,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/communities/:id/leave", async (req, res) => {
+  app.post("/api/communities/:id/leave", isAuthenticated, async (req: any, res) => {
     try {
-      const { userId } = req.body;
+      const userId = req.user.claims.sub;
       await storage.leaveCommunity(req.params.id, userId);
       res.status(204).send();
     } catch (error) {
@@ -161,26 +158,19 @@ export async function registerRoutes(
     }
   });
 
-  // Posts
   app.get("/api/communities/:id/posts", async (req, res) => {
     try {
       const posts = await storage.getPosts(req.params.id);
-      const postsWithoutPasswords = posts.map(post => ({
-        ...post,
-        user: (() => {
-          const { password, ...userWithoutPassword } = post.user;
-          return userWithoutPassword;
-        })()
-      }));
-      res.json(postsWithoutPasswords);
+      res.json(posts);
     } catch (error) {
       res.status(500).json({ error: "Failed to get posts" });
     }
   });
 
-  app.post("/api/posts", async (req, res) => {
+  app.post("/api/posts", isAuthenticated, async (req: any, res) => {
     try {
-      const validatedData = insertPostSchema.parse(req.body);
+      const userId = req.user.claims.sub;
+      const validatedData = insertPostSchema.parse({ ...req.body, userId });
       const post = await storage.createPost(validatedData);
       res.status(201).json(post);
     } catch (error: any) {
@@ -191,26 +181,19 @@ export async function registerRoutes(
     }
   });
 
-  // Sessions
   app.get("/api/sessions", async (req, res) => {
     try {
       const sessions = await storage.getSessions();
-      const sessionsWithoutPasswords = sessions.map(session => ({
-        ...session,
-        creator: (() => {
-          const { password, ...userWithoutPassword } = session.creator;
-          return userWithoutPassword;
-        })()
-      }));
-      res.json(sessionsWithoutPasswords);
+      res.json(sessions);
     } catch (error) {
       res.status(500).json({ error: "Failed to get sessions" });
     }
   });
 
-  app.post("/api/sessions", async (req, res) => {
+  app.post("/api/sessions", isAuthenticated, async (req: any, res) => {
     try {
-      const validatedData = insertSessionSchema.parse(req.body);
+      const userId = req.user.claims.sub;
+      const validatedData = insertSessionSchema.parse({ ...req.body, createdBy: userId });
       const session = await storage.createSession(validatedData);
       res.status(201).json(session);
     } catch (error: any) {
@@ -221,8 +204,7 @@ export async function registerRoutes(
     }
   });
 
-  // Messages
-  app.get("/api/messages/conversation/:userId/:otherUserId", async (req, res) => {
+  app.get("/api/messages/conversation/:userId/:otherUserId", isAuthenticated, async (req, res) => {
     try {
       const messages = await storage.getConversation(req.params.userId, req.params.otherUserId);
       res.json(messages);
@@ -231,9 +213,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/messages", async (req, res) => {
+  app.post("/api/messages", isAuthenticated, async (req: any, res) => {
     try {
-      const validatedData = insertMessageSchema.parse(req.body);
+      const userId = req.user.claims.sub;
+      const validatedData = insertMessageSchema.parse({ ...req.body, senderId: userId });
       const message = await storage.sendMessage(validatedData);
       res.status(201).json(message);
     } catch (error: any) {
@@ -244,23 +227,15 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/users/:id/chats", async (req, res) => {
+  app.get("/api/users/:id/chats", isAuthenticated, async (req, res) => {
     try {
       const chats = await storage.getRecentChats(req.params.id);
-      const chatsWithoutPasswords = chats.map(chat => ({
-        ...chat,
-        user: (() => {
-          const { password, ...userWithoutPassword } = chat.user;
-          return userWithoutPassword;
-        })()
-      }));
-      res.json(chatsWithoutPasswords);
+      res.json(chats);
     } catch (error) {
       res.status(500).json({ error: "Failed to get chats" });
     }
   });
 
-  // Games
   app.get("/api/games", async (req, res) => {
     try {
       const games = await storage.getGames();
