@@ -1,33 +1,126 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Layout from "@/components/layout";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, Users, Lock, MessageSquare, Calendar, Hash } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+
+const CURRENT_USER_ID = "a476ca41-1b48-4406-aeb2-034f85984217"; // NeoGamer2077
 
 export default function CommunityDetail({ params }: { params: { id: string } }) {
   const [, setLocation] = useLocation();
-  const [joined, setJoined] = useState(false);
+  const [newPostContent, setNewPostContent] = useState("");
+  const queryClient = useQueryClient();
 
-  // Mock data - in a real app, fetch based on ID
-  const community = {
-    id: "1",
-    name: "Arc Raiders Elite",
-    game: "Arc Raiders",
-    members: 1240,
-    isPrivate: false,
-    image: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670",
-    description: "The premier community for high-level Arc Raiders gameplay. We organize daily raids, share meta builds, and help new players get started.",
-    channels: ["general", "lfg-raid", "builds", "clips"],
-    posts: [
-      { id: 1, user: "RaidLeader", content: "Need 2 more for deep run tonight. 8PM EST.", time: "2h ago", likes: 12, comments: 4 },
-      { id: 2, user: "SniperWolf", content: "Just found this insane loot spot in the sunken city!", time: "4h ago", likes: 45, comments: 8 },
-      { id: 3, user: "NewGuy", content: "Is the heavy laser worth crafting?", time: "6h ago", likes: 5, comments: 12 },
-    ]
-  };
+  const { data: community, isLoading: communityLoading } = useQuery({
+    queryKey: ["community", params.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/communities/${params.id}`);
+      if (!response.ok) throw new Error("Community not found");
+      return response.json();
+    },
+  });
+
+  const { data: isMember } = useQuery({
+    queryKey: ["membership", params.id, CURRENT_USER_ID],
+    queryFn: async () => {
+      const response = await fetch(`/api/communities/${params.id}/is-member/${CURRENT_USER_ID}`);
+      const data = await response.json();
+      return data.isMember;
+    },
+  });
+
+  const { data: posts } = useQuery({
+    queryKey: ["posts", params.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/communities/${params.id}/posts`);
+      return response.json();
+    },
+    enabled: !!isMember,
+  });
+
+  const joinMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/communities/${params.id}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: CURRENT_USER_ID }),
+      });
+      if (!response.ok) throw new Error("Failed to join");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["membership", params.id, CURRENT_USER_ID] });
+      queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
+      toast.success("Joined community successfully!");
+    },
+  });
+
+  const leaveMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/communities/${params.id}/leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: CURRENT_USER_ID }),
+      });
+      if (!response.ok) throw new Error("Failed to leave");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["membership", params.id, CURRENT_USER_ID] });
+      queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
+      toast.success("Left community");
+    },
+  });
+
+  const postMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const response = await fetch("/api/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          communityId: params.id,
+          userId: CURRENT_USER_ID,
+          content,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to post");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
+      setNewPostContent("");
+      toast.success("Posted successfully!");
+    },
+  });
+
+  if (communityLoading) {
+    return (
+      <Layout>
+        <div className="animate-pulse space-y-6">
+          <div className="h-64 bg-card/30 rounded-2xl" />
+          <div className="h-96 bg-card/30 rounded-2xl" />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!community) {
+    return (
+      <Layout>
+        <div className="text-center py-16">
+          <h2 className="text-2xl font-bold">Community not found</h2>
+          <Button onClick={() => setLocation("/discover")} className="mt-4">
+            Back to Discover
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -39,7 +132,7 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
         {/* Hero Header */}
         <div className="relative h-64 rounded-2xl overflow-hidden group">
           <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent z-10" />
-          <img src={community.image} alt={community.name} className="w-full h-full object-cover" />
+          <img src={community.image || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670"} alt={community.name} className="w-full h-full object-cover" />
           <div className="absolute bottom-0 left-0 p-6 z-20 w-full flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -51,10 +144,11 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
             </div>
             <Button 
               size="lg" 
-              className={`shadow-xl ${joined ? "bg-secondary text-secondary-foreground" : "bg-primary hover:bg-primary/90"}`}
-              onClick={() => setJoined(!joined)}
+              className={`shadow-xl ${isMember ? "bg-secondary text-secondary-foreground" : "bg-primary hover:bg-primary/90"}`}
+              onClick={() => isMember ? leaveMutation.mutate() : joinMutation.mutate()}
+              disabled={joinMutation.isPending || leaveMutation.isPending}
             >
-              {joined ? "Joined" : "Join Community"}
+              {isMember ? "Leave Community" : "Join Community"}
             </Button>
           </div>
         </div>
@@ -75,13 +169,13 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
                   +1k
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">{community.members.toLocaleString()} gamers</p>
+              <p className="text-sm text-muted-foreground">1,240 gamers</p>
             </div>
 
             <div className="bg-card/30 border border-border/50 rounded-xl p-4 backdrop-blur-md">
               <h3 className="font-bold mb-4 flex items-center"><Hash className="w-4 h-4 mr-2 text-primary" /> Channels</h3>
               <div className="space-y-1">
-                {community.channels.map((channel) => (
+                {["general", "lfg-raid", "builds", "clips"].map((channel) => (
                   <Button key={channel} variant="ghost" size="sm" className="w-full justify-start text-muted-foreground hover:text-primary hover:bg-primary/10">
                     # {channel}
                   </Button>
@@ -100,44 +194,61 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
               </TabsList>
               
               <TabsContent value="discussion" className="mt-6 space-y-4">
-                {/* Post Input */}
-                <div className="bg-card/30 border border-border/50 rounded-xl p-4 flex gap-4">
-                  <Avatar>
-                    <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=NeoGamer" />
-                    <AvatarFallback>ME</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <input 
-                      type="text" 
-                      placeholder="Share something with the community..." 
-                      className="w-full bg-transparent border-none focus:outline-none text-foreground placeholder:text-muted-foreground"
-                    />
-                    <div className="flex justify-end mt-2">
-                      <Button size="sm">Post</Button>
+                {isMember && (
+                  <div className="bg-card/30 border border-border/50 rounded-xl p-4 flex gap-4">
+                    <Avatar>
+                      <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=NeoGamer" />
+                      <AvatarFallback>ME</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <Textarea 
+                        value={newPostContent}
+                        onChange={(e) => setNewPostContent(e.target.value)}
+                        placeholder="Share something with the community..." 
+                        className="bg-transparent border-none focus:outline-none text-foreground placeholder:text-muted-foreground resize-none min-h-[60px]"
+                      />
+                      <div className="flex justify-end mt-2">
+                        <Button 
+                          size="sm" 
+                          onClick={() => newPostContent && postMutation.mutate(newPostContent)}
+                          disabled={!newPostContent || postMutation.isPending}
+                        >
+                          Post
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {!isMember && (
+                  <div className="bg-card/30 border border-border/50 rounded-xl p-8 text-center">
+                    <p className="text-muted-foreground mb-4">Join this community to see and participate in discussions</p>
+                    <Button onClick={() => joinMutation.mutate()}>Join Community</Button>
+                  </div>
+                )}
 
                 {/* Posts Feed */}
-                {community.posts.map((post) => (
+                {posts && posts.map((post: any) => (
                   <div key={post.id} className="bg-card/30 border border-border/50 rounded-xl p-4 hover:border-primary/20 transition-colors">
                     <div className="flex items-start gap-3">
                       <Avatar>
-                        <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user}`} />
-                        <AvatarFallback>{post.user[0]}</AvatarFallback>
+                        <AvatarImage src={post.user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user.username}`} />
+                        <AvatarFallback>{post.user.username[0]}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-baseline justify-between">
-                          <h4 className="font-bold">{post.user}</h4>
-                          <span className="text-xs text-muted-foreground">{post.time}</span>
+                          <h4 className="font-bold">{post.user.username}</h4>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(post.createdAt).toLocaleString()}
+                          </span>
                         </div>
                         <p className="mt-1 text-sm">{post.content}</p>
                         <div className="flex gap-4 mt-3">
                           <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-primary">
-                            Likes ({post.likes})
+                            Likes (0)
                           </Button>
                           <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-primary">
-                            Comments ({post.comments})
+                            Comments (0)
                           </Button>
                         </div>
                       </div>
