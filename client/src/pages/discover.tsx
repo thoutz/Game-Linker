@@ -3,6 +3,7 @@ import CommunityCard from "@/components/community-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Compass, Flame, Swords } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Discover() {
   return (
@@ -35,28 +36,40 @@ export default function Discover() {
             <h2 className="text-xl font-display font-bold">Trending Communities</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-             <CommunityCard 
-              name="Arc Raiders Elite" 
-              game="Arc Raiders" 
-              members={1240} 
-              description="Official community for high-level Arc Raiders gameplay and strategy sharing."
-              image="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670"
-            />
-            <CommunityCard 
-              name="Neon City Roleplay" 
-              game="Cyberpunk 2077" 
-              members={8900} 
-              description="Deep immersion roleplay server. Whitelist only."
-              image="https://images.unsplash.com/photo-1555680202-c86f0e12f086?auto=format&fit=crop&q=80&w=2670"
-              isPrivate
-            />
-            <CommunityCard 
-              name="Destiny 2 Raids" 
-              game="Destiny 2" 
-              members={15400} 
-              description="Find a fireteam for any raid, any time. Sherpas available."
-              image="https://images.unsplash.com/photo-1624138784181-dc7f5b759b2d?auto=format&fit=crop&q=80&w=2670"
-            />
+            <Link href="/community/1">
+              <a className="block h-full cursor-pointer hover:no-underline">
+                <CommunityCard 
+                  name="Arc Raiders Elite" 
+                  game="Arc Raiders" 
+                  members={1240} 
+                  description="Official community for high-level Arc Raiders gameplay and strategy sharing."
+                  image="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670"
+                />
+              </a>
+            </Link>
+            <Link href="/community/2">
+               <a className="block h-full cursor-pointer hover:no-underline">
+                <CommunityCard 
+                  name="Neon City Roleplay" 
+                  game="Cyberpunk 2077" 
+                  members={8900} 
+                  description="Deep immersion roleplay server. Whitelist only."
+                  image="https://images.unsplash.com/photo-1555680202-c86f0e12f086?auto=format&fit=crop&q=80&w=2670"
+                  isPrivate
+                />
+              </a>
+            </Link>
+            <Link href="/community/3">
+               <a className="block h-full cursor-pointer hover:no-underline">
+                <CommunityCard 
+                  name="Destiny 2 Raids" 
+                  game="Destiny 2" 
+                  members={15400} 
+                  description="Find a fireteam for any raid, any time. Sherpas available."
+                  image="https://images.unsplash.com/photo-1624138784181-dc7f5b759b2d?auto=format&fit=crop&q=80&w=2670"
+                />
+              </a>
+            </Link>
           </div>
         </section>
 

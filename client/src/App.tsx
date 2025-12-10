@@ -8,6 +8,7 @@ import Home from "@/pages/home";
 import Messages from "@/pages/messages";
 import Profile from "@/pages/profile";
 import Discover from "@/pages/discover";
+import CommunityDetail from "@/pages/community-detail";
 
 function Router() {
   return (
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/messages" component={Messages} />
       <Route path="/profile" component={Profile} />
       <Route path="/discover" component={Discover} />
+      <Route path="/community/:id" component={CommunityDetail} />
       <Route component={NotFound} />
     </Switch>
   );

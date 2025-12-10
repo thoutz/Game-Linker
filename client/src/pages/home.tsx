@@ -2,10 +2,12 @@ import { useState } from "react";
 import Layout from "@/components/layout";
 import GamerCard from "@/components/gamer-card";
 import CommunityCard from "@/components/community-card";
+import CreateSessionDialog from "@/components/create-session-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Search, Plus, Calendar, Zap } from "lucide-react";
+import { Link } from "wouter";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("feed");
@@ -27,9 +29,7 @@ export default function Home() {
               className="pl-9 bg-card/50 border-border/50 focus-visible:ring-accent/50"
             />
           </div>
-          <Button size="icon" className="bg-primary hover:bg-primary/90 shadow-[0_0_15px_rgba(139,47,201,0.3)]">
-            <Plus className="w-5 h-5" />
-          </Button>
+          <CreateSessionDialog />
         </div>
       </header>
 
@@ -78,9 +78,9 @@ export default function Home() {
 
           <section>
             <h2 className="text-xl font-display font-bold mb-4">Upcoming Sessions</h2>
-            <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-xl p-4 flex items-center justify-between backdrop-blur-md">
-              <div className="flex items-center gap-4">
-                <div className="bg-primary/20 p-3 rounded-lg text-primary">
+            <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between backdrop-blur-md gap-4">
+              <div className="flex items-center gap-4 w-full md:w-auto">
+                <div className="bg-primary/20 p-3 rounded-lg text-primary shrink-0">
                   <Calendar className="w-6 h-6" />
                 </div>
                 <div>
@@ -88,7 +88,7 @@ export default function Home() {
                   <p className="text-sm text-muted-foreground">Today, 8:00 PM • with @CyberNinja + 2 others</p>
                 </div>
               </div>
-              <Button size="sm" variant="outline" className="border-primary/50 text-primary hover:bg-primary hover:text-white">
+              <Button size="sm" variant="outline" className="w-full md:w-auto border-primary/50 text-primary hover:bg-primary hover:text-white">
                 Join Lobby
               </Button>
             </div>
@@ -97,28 +97,40 @@ export default function Home() {
 
         <TabsContent value="communities" className="animate-in slide-in-from-bottom-4 duration-500">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <CommunityCard 
-              name="Arc Raiders Elite" 
-              game="Arc Raiders" 
-              members={1240} 
-              description="Official community for high-level Arc Raiders gameplay and strategy sharing."
-              image="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670"
-            />
-            <CommunityCard 
-              name="Cozy Gamers" 
-              game="General" 
-              members={5890} 
-              isPrivate
-              description="A chill place for cozy game lovers to share screenshots and vibes."
-              image="https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?auto=format&fit=crop&q=80&w=2670"
-            />
-            <CommunityCard 
-              name="FPS Legends" 
-              game="Shooters" 
-              members={3200} 
-              description="Competitive shooter discussion, LFG, and tournament organization."
-              image="https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=2671"
-            />
+            <Link href="/community/1">
+              <a className="block h-full cursor-pointer">
+                <CommunityCard 
+                  name="Arc Raiders Elite" 
+                  game="Arc Raiders" 
+                  members={1240} 
+                  description="Official community for high-level Arc Raiders gameplay and strategy sharing."
+                  image="https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670"
+                />
+              </a>
+            </Link>
+            <Link href="/community/2">
+              <a className="block h-full cursor-pointer">
+                <CommunityCard 
+                  name="Cozy Gamers" 
+                  game="General" 
+                  members={5890} 
+                  isPrivate
+                  description="A chill place for cozy game lovers to share screenshots and vibes."
+                  image="https://images.unsplash.com/photo-1493711662062-fa541adb3fc8?auto=format&fit=crop&q=80&w=2670"
+                />
+              </a>
+            </Link>
+            <Link href="/community/3">
+              <a className="block h-full cursor-pointer">
+                <CommunityCard 
+                  name="FPS Legends" 
+                  game="Shooters" 
+                  members={3200} 
+                  description="Competitive shooter discussion, LFG, and tournament organization."
+                  image="https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&q=80&w=2671"
+                />
+              </a>
+            </Link>
           </div>
         </TabsContent>
       </Tabs>
