@@ -7,7 +7,8 @@ import CreateSessionDialog from "@/components/create-session-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Search, Calendar, Zap } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
+import { Search, Calendar, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import { Link } from "wouter";
 
 // For demo purposes - in a real app this would come from auth
@@ -62,6 +63,76 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Upcoming Sessions - Now at top as a swipeable carousel */}
+      <section className="mb-8">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-display font-bold flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-primary" />
+            Upcoming Sessions
+          </h2>
+          {sessions && sessions.length > 1 && (
+            <span className="text-xs text-muted-foreground">Swipe to see more</span>
+          )}
+        </div>
+        
+        {sessions && sessions.length > 0 ? (
+          <Carousel
+            opts={{
+              align: "start",
+              loop: true,
+            }}
+            className="w-full"
+          >
+            <CarouselContent className="-ml-2 md:-ml-4">
+              {sessions.map((session: any) => (
+                <CarouselItem key={session.id} className="pl-2 md:pl-4 basis-full md:basis-[85%] lg:basis-[70%]">
+                  <div className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-xl p-4 md:p-6 flex flex-col md:flex-row items-center justify-between backdrop-blur-md gap-4 h-full">
+                    <div className="flex items-center gap-4 w-full md:w-auto">
+                      <div className="bg-primary/20 p-3 md:p-4 rounded-xl text-primary shrink-0">
+                        <Calendar className="w-6 h-6 md:w-8 md:h-8" />
+                      </div>
+                      <div>
+                        <span className="text-xs uppercase tracking-wider text-primary font-medium">{session.game}</span>
+                        <h3 className="font-bold text-lg md:text-xl">{session.title}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {new Date(session.scheduledFor).toLocaleString([], { 
+                            weekday: 'short', 
+                            month: 'short', 
+                            day: 'numeric',
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          with @{session.creator.username} + {session.slotsNeeded} slots open
+                        </p>
+                      </div>
+                    </div>
+                    <Link href={`/messages`}>
+                      <Button className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(139,47,201,0.3)]">
+                        Join Lobby
+                      </Button>
+                    </Link>
+                  </div>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            {sessions.length > 1 && (
+              <>
+                <CarouselPrevious className="hidden md:flex -left-4 bg-card/80 border-border/50 hover:bg-primary/20 hover:text-primary hover:border-primary/50" />
+                <CarouselNext className="hidden md:flex -right-4 bg-card/80 border-border/50 hover:bg-primary/20 hover:text-primary hover:border-primary/50" />
+              </>
+            )}
+          </Carousel>
+        ) : (
+          <div className="bg-card/30 border border-border/50 rounded-xl p-8 text-center">
+            <Calendar className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground">No upcoming sessions</p>
+            <p className="text-xs text-muted-foreground mt-1">Create one to start playing with friends!</p>
+          </div>
+        )}
+      </section>
+
       <Tabs defaultValue="feed" className="space-y-6" onValueChange={setActiveTab}>
         <TabsList className="inline-flex h-9 items-center rounded-lg text-muted-foreground bg-card/50 backdrop-blur p-1 border border-border/50 w-full justify-center overflow-x-auto no-scrollbar">
           <TabsTrigger value="feed" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary shrink-0">
@@ -103,34 +174,6 @@ export default function Home() {
                 ) : (
                   <p className="text-muted-foreground col-span-full text-center py-8">No friends yet. Start connecting with other gamers!</p>
                 )}
-              </div>
-            )}
-          </section>
-
-          <section>
-            <h2 className="text-xl font-display font-bold mb-4">Upcoming Sessions</h2>
-            {sessions && sessions.length > 0 ? (
-              sessions.slice(0, 3).map((session: any) => (
-                <div key={session.id} className="bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between backdrop-blur-md gap-4 mb-4">
-                  <div className="flex items-center gap-4 w-full md:w-auto">
-                    <div className="bg-primary/20 p-3 rounded-lg text-primary shrink-0">
-                      <Calendar className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold">{session.title}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(session.scheduledFor).toLocaleString()} • with @{session.creator.username} + {session.slotsNeeded} others
-                      </p>
-                    </div>
-                  </div>
-                  <Button size="sm" variant="outline" className="w-full md:w-auto border-primary/50 text-primary hover:bg-primary hover:text-white">
-                    Join Lobby
-                  </Button>
-                </div>
-              ))
-            ) : (
-              <div className="bg-card/30 border border-border/50 rounded-xl p-8 text-center">
-                <p className="text-muted-foreground">No upcoming sessions. Create one to start playing!</p>
               </div>
             )}
           </section>
