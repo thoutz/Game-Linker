@@ -245,12 +245,77 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/games/search", async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      if (!query || query.length < 2) {
+        return res.json({ results: [] });
+      }
+      const apiKey = process.env.RAWG_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "RAWG API key not configured" });
+      }
+      const response = await fetch(
+        `https://api.rawg.io/api/games?key=${apiKey}&search=${encodeURIComponent(query)}&page_size=10`
+      );
+      const data = await response.json();
+      const results = data.results?.map((game: any) => ({
+        id: game.id,
+        name: game.name,
+        icon: game.background_image,
+        released: game.released,
+        rating: game.rating,
+        platforms: game.platforms?.map((p: any) => p.platform.name) || [],
+      })) || [];
+      res.json({ results });
+    } catch (error) {
+      console.error("RAWG API error:", error);
+      res.status(500).json({ error: "Failed to search games" });
+    }
+  });
+
   app.get("/api/users/:id/games", async (req, res) => {
     try {
       const userGames = await storage.getUserGames(req.params.id);
       res.json(userGames);
     } catch (error) {
       res.status(500).json({ error: "Failed to get user games" });
+    }
+  });
+
+  app.post("/api/users/:id/games", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      if (userId !== req.params.id) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      const { gameName, gameIcon, rank } = req.body;
+      let game = await storage.getGameByName(gameName);
+      if (!game) {
+        game = await storage.createGame({ name: gameName, icon: gameIcon });
+      }
+      const userGame = await storage.addUserGame({
+        userId,
+        gameId: game.id,
+        rank,
+      });
+      res.status(201).json(userGame);
+    } catch (error) {
+      console.error("Add user game error:", error);
+      res.status(500).json({ error: "Failed to add game" });
+    }
+  });
+
+  app.get("/api/users/search", isAuthenticated, async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      if (!query || query.length < 2) {
+        return res.json([]);
+      }
+      const users = await storage.searchUsers(query);
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search users" });
     }
   });
 

@@ -5,11 +5,13 @@ import Layout from "@/components/layout";
 import GamerCard from "@/components/gamer-card";
 import CommunityCard from "@/components/community-card";
 import CreateSessionDialog from "@/components/create-session-dialog";
+import CreateCommunityDialog from "@/components/create-community-dialog";
+import AddFriendDialog from "@/components/add-friend-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-import { Search, Calendar, Zap } from "lucide-react";
+import { Search, Calendar, Zap, Users } from "lucide-react";
 import { Link } from "wouter";
 
 export default function Home() {
@@ -151,7 +153,7 @@ export default function Home() {
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-display font-bold">Online Friends</h2>
-              <Button variant="link" className="text-accent h-auto p-0">View all</Button>
+              <AddFriendDialog />
             </div>
             {friendsLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -181,6 +183,13 @@ export default function Home() {
         </TabsContent>
 
         <TabsContent value="communities" className="animate-in slide-in-from-bottom-4 duration-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-display font-bold flex items-center gap-2">
+              <Users className="w-5 h-5 text-accent" />
+              Communities
+            </h2>
+            <CreateCommunityDialog />
+          </div>
           {communitiesLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {[1, 2, 3].map(i => (

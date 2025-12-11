@@ -37,6 +37,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  searchUsers(query: string): Promise<User[]>;
   
   getFriends(userId: string): Promise<User[]>;
   addFriend(friendship: InsertFriendship): Promise<Friendship>;
@@ -62,6 +63,8 @@ export interface IStorage {
   getRecentChats(userId: string): Promise<{ user: User; lastMessage: Message }[]>;
   
   getGames(): Promise<Game[]>;
+  getGameByName(name: string): Promise<Game | undefined>;
+  createGame(game: InsertGame): Promise<Game>;
   addUserGame(userGame: InsertUserGame): Promise<UserGame>;
   getUserGames(userId: string): Promise<(UserGame & { game: Game })[]>;
 }
@@ -100,6 +103,14 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async searchUsers(query: string): Promise<User[]> {
+    return db
+      .select()
+      .from(users)
+      .where(sql`${users.username} ILIKE ${'%' + query + '%'}`)
+      .limit(10);
   }
 
   async getFriends(userId: string): Promise<User[]> {
@@ -277,6 +288,16 @@ export class DatabaseStorage implements IStorage {
 
   async getGames(): Promise<Game[]> {
     return db.select().from(games);
+  }
+
+  async getGameByName(name: string): Promise<Game | undefined> {
+    const [game] = await db.select().from(games).where(eq(games.name, name));
+    return game;
+  }
+
+  async createGame(game: InsertGame): Promise<Game> {
+    const [result] = await db.insert(games).values(game).returning();
+    return result;
   }
 
   async addUserGame(userGame: InsertUserGame): Promise<UserGame> {
