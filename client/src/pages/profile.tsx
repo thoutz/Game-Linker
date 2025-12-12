@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2 } from "lucide-react";
+import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -51,7 +51,10 @@ export default function Profile() {
   const [editBio, setEditBio] = useState("");
   const [editStatusText, setEditStatusText] = useState("");
   const [editStatus, setEditStatus] = useState("online");
+  const [editUsername, setEditUsername] = useState("");
+  const [editDisplayName, setEditDisplayName] = useState("");
   const [selectedAvatarStyle, setSelectedAvatarStyle] = useState("avataaars");
+  const [customAvatarUrl, setCustomAvatarUrl] = useState("");
   const queryClient = useQueryClient();
 
   const { data: userGames, isLoading: gamesLoading } = useQuery({
@@ -66,14 +69,17 @@ export default function Profile() {
   });
 
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: { bio?: string; status?: string; statusText?: string; avatar?: string }) => {
+    mutationFn: async (data: { bio?: string; status?: string; statusText?: string; avatar?: string; username?: string; displayName?: string; profileImageUrl?: string }) => {
       if (!user?.id) throw new Error("Not authenticated");
       const response = await fetch(`/api/users/${user.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to update profile");
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to update profile");
+      }
       return response.json();
     },
     onSuccess: () => {
@@ -82,8 +88,25 @@ export default function Profile() {
       setEditDialogOpen(false);
       setAvatarDialogOpen(false);
     },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to update profile");
+    },
+  });
+
+  const syncSteamMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/steam/sync-playtime", {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Failed to sync Steam playtime");
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["userGames", user?.id] });
+      toast.success(`Synced playtime for ${data.synced} games`);
+    },
     onError: () => {
-      toast.error("Failed to update profile");
+      toast.error("Failed to sync Steam playtime");
     },
   });
 
@@ -96,11 +119,18 @@ export default function Profile() {
   };
 
   const handleSaveProfile = () => {
-    updateProfileMutation.mutate({
+    const updates: any = {
       bio: editBio,
       status: editStatus,
       statusText: editStatusText,
-    });
+    };
+    if (editUsername && editUsername !== user?.username) {
+      updates.username = editUsername;
+    }
+    if (editDisplayName !== (user?.displayName || "")) {
+      updates.displayName = editDisplayName;
+    }
+    updateProfileMutation.mutate(updates);
   };
 
   const handleSaveAvatar = (style: string) => {
@@ -112,6 +142,8 @@ export default function Profile() {
     setEditBio(user?.bio || "");
     setEditStatusText(user?.statusText || "");
     setEditStatus(user?.status || "online");
+    setEditUsername(user?.username || "");
+    setEditDisplayName(user?.displayName || "");
     setEditDialogOpen(true);
   };
 
@@ -119,7 +151,14 @@ export default function Profile() {
     const currentAvatar = user?.avatar || "";
     const matchedStyle = AVATAR_STYLES.find(style => currentAvatar.includes(style));
     setSelectedAvatarStyle(matchedStyle || "avataaars");
+    setCustomAvatarUrl("");
     setAvatarDialogOpen(true);
+  };
+
+  const handleSaveCustomAvatar = () => {
+    if (customAvatarUrl.trim()) {
+      updateProfileMutation.mutate({ profileImageUrl: customAvatarUrl.trim(), avatar: customAvatarUrl.trim() });
+    }
   };
 
   if (isLoading) {
@@ -148,7 +187,7 @@ export default function Profile() {
   }
 
   const username = user.username;
-  const displayName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : username;
+  const displayName = user.displayName || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : username);
   const avatarUrl = user.profileImageUrl || user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
   const currentStatus = STATUS_OPTIONS.find(s => s.value === user.status) || STATUS_OPTIONS[0];
 
@@ -182,30 +221,62 @@ export default function Profile() {
                 </DialogTrigger>
                 <DialogContent className="max-w-md">
                   <DialogHeader>
-                    <DialogTitle className="font-display">Choose Avatar Style</DialogTitle>
+                    <DialogTitle className="font-display">Choose Avatar</DialogTitle>
                   </DialogHeader>
-                  <div className="grid grid-cols-3 gap-4 py-4">
-                    {AVATAR_STYLES.map((style) => (
-                      <button
-                        key={style}
-                        onClick={() => setSelectedAvatarStyle(style)}
-                        className={cn(
-                          "p-2 rounded-xl border-2 transition-all hover:scale-105",
-                          selectedAvatarStyle === style 
-                            ? "border-primary bg-primary/10" 
-                            : "border-border/50 hover:border-primary/50"
-                        )}
-                        data-testid={`avatar-style-${style}`}
-                      >
-                        <img 
-                          src={`https://api.dicebear.com/7.x/${style}/svg?seed=${username}`}
-                          alt={style}
-                          className="w-full aspect-square rounded-lg"
+                  
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label>Custom Image URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="https://example.com/your-image.jpg"
+                          value={customAvatarUrl}
+                          onChange={(e) => setCustomAvatarUrl(e.target.value)}
+                          data-testid="input-custom-avatar"
                         />
-                        <p className="text-xs text-center mt-1 capitalize">{style.replace("-", " ")}</p>
-                      </button>
-                    ))}
+                        <Button 
+                          onClick={handleSaveCustomAvatar} 
+                          disabled={!customAvatarUrl.trim() || updateProfileMutation.isPending}
+                          data-testid="button-save-custom-avatar"
+                        >
+                          {updateProfileMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-background px-2 text-muted-foreground">Or choose a style</span>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-4">
+                      {AVATAR_STYLES.map((style) => (
+                        <button
+                          key={style}
+                          onClick={() => setSelectedAvatarStyle(style)}
+                          className={cn(
+                            "p-2 rounded-xl border-2 transition-all hover:scale-105",
+                            selectedAvatarStyle === style 
+                              ? "border-primary bg-primary/10" 
+                              : "border-border/50 hover:border-primary/50"
+                          )}
+                          data-testid={`avatar-style-${style}`}
+                        >
+                          <img 
+                            src={`https://api.dicebear.com/7.x/${style}/svg?seed=${username}`}
+                            alt={style}
+                            className="w-full aspect-square rounded-lg"
+                          />
+                          <p className="text-xs text-center mt-1 capitalize">{style.replace("-", " ")}</p>
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  
                   <Button 
                     onClick={() => handleSaveAvatar(selectedAvatarStyle)} 
                     className="w-full"
@@ -213,7 +284,7 @@ export default function Profile() {
                     data-testid="button-save-avatar"
                   >
                     {updateProfileMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    Save Avatar
+                    Save Selected Style
                   </Button>
                 </DialogContent>
               </Dialog>
@@ -256,6 +327,32 @@ export default function Profile() {
               <DialogTitle className="font-display">Edit Profile</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="displayName">Display Name</Label>
+                <Input
+                  id="displayName"
+                  placeholder="Your display name"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  data-testid="input-display-name"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">@</span>
+                  <Input
+                    id="username"
+                    placeholder="username"
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    data-testid="input-username"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">Only lowercase letters, numbers, and underscores</p>
+              </div>
+              
               <div className="space-y-2">
                 <Label htmlFor="bio">Bio</Label>
                 <Textarea
@@ -349,7 +446,25 @@ export default function Profile() {
                 <Gamepad2 className="w-5 h-5 text-primary" />
                 Games I Play
               </h3>
-              <AddGameDialog />
+              <div className="flex gap-2">
+                {user.steamId && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => syncSteamMutation.mutate()}
+                    disabled={syncSteamMutation.isPending}
+                    data-testid="button-sync-steam"
+                  >
+                    {syncSteamMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Sync Steam
+                  </Button>
+                )}
+                <AddGameDialog />
+              </div>
             </div>
             
             {gamesLoading ? (
