@@ -202,8 +202,8 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
                 {isMember && (
                   <div className="bg-card/30 border border-border/50 rounded-xl p-4 flex gap-4">
                     <Avatar>
-                      <AvatarImage src="https://api.dicebear.com/7.x/avataaars/svg?seed=NeoGamer" />
-                      <AvatarFallback>ME</AvatarFallback>
+                      <AvatarImage src={user?.profileImageUrl || user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}`} />
+                      <AvatarFallback>{user?.username?.[0]?.toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
                       <Textarea 

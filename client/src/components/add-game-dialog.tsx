@@ -93,7 +93,8 @@ export default function AddGameDialog() {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="game">Search Game</Label>
+            <Label htmlFor="game">Search Game *</Label>
+            <p className="text-xs text-muted-foreground">Search from 500,000+ games</p>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input

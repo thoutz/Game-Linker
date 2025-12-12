@@ -213,6 +213,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/messages/:otherUserId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const messages = await storage.getConversation(userId, req.params.otherUserId);
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get conversation" });
+    }
+  });
+
   app.post("/api/messages", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
