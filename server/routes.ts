@@ -2,8 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertCommunitySchema, insertPostSchema, insertSessionSchema, insertMessageSchema, insertFriendshipSchema } from "@shared/schema";
+import { insertCommunitySchema, insertPostSchema, insertSessionSchema, insertMessageSchema, insertFriendshipSchema, insertVoiceChannelSchema, insertNotificationSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { generateLiveKitToken, generateRoomName, isLiveKitConfigured, getLiveKitUrl } from "./livekit";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -326,6 +327,213 @@ export async function registerRoutes(
       res.json(users);
     } catch (error) {
       res.status(500).json({ error: "Failed to search users" });
+    }
+  });
+
+  app.get("/api/livekit/config", (req, res) => {
+    res.json({
+      configured: isLiveKitConfigured(),
+      url: getLiveKitUrl(),
+    });
+  });
+
+  app.get("/api/communities/:id/voice-channels", async (req, res) => {
+    try {
+      const channels = await storage.getVoiceChannels(req.params.id);
+      res.json(channels);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get voice channels" });
+    }
+  });
+
+  app.post("/api/communities/:id/voice-channels", isAuthenticated, async (req: any, res) => {
+    try {
+      const isMember = await storage.isMember(req.params.id, req.user.claims.sub);
+      if (!isMember) {
+        return res.status(403).json({ error: "Must be a community member" });
+      }
+      const validatedData = insertVoiceChannelSchema.parse({
+        ...req.body,
+        communityId: req.params.id,
+        livekitRoom: generateRoomName("community", req.params.id + "-" + Date.now()),
+      });
+      const channel = await storage.createVoiceChannel(validatedData);
+      res.status(201).json(channel);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ error: fromZodError(error).message });
+      }
+      res.status(500).json({ error: "Failed to create voice channel" });
+    }
+  });
+
+  app.post("/api/voice-channels/:id/join", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const channel = await storage.getVoiceChannel(req.params.id);
+      if (!channel) {
+        return res.status(404).json({ error: "Voice channel not found" });
+      }
+      
+      const participants = await storage.getVoiceChannelParticipants(req.params.id);
+      if (participants.length >= channel.maxParticipants) {
+        return res.status(400).json({ error: "Voice channel is full" });
+      }
+      
+      const isInChannel = await storage.isInVoiceChannel(req.params.id, userId);
+      if (!isInChannel) {
+        await storage.joinVoiceChannel({ channelId: req.params.id, userId });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!channel.livekitRoom) {
+        return res.status(400).json({ error: "LiveKit room not configured" });
+      }
+      
+      const token = await generateLiveKitToken(
+        channel.livekitRoom,
+        user?.username || "Anonymous",
+        userId
+      );
+      
+      res.json({ token, url: getLiveKitUrl(), room: channel.livekitRoom });
+    } catch (error) {
+      console.error("Join voice channel error:", error);
+      res.status(500).json({ error: "Failed to join voice channel" });
+    }
+  });
+
+  app.post("/api/voice-channels/:id/leave", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.leaveVoiceChannel(req.params.id, userId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to leave voice channel" });
+    }
+  });
+
+  app.get("/api/voice-channels/:id/participants", async (req, res) => {
+    try {
+      const participants = await storage.getVoiceChannelParticipants(req.params.id);
+      res.json(participants);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get participants" });
+    }
+  });
+
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const notifications = await storage.getNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const count = await storage.getUnreadNotificationCount(userId);
+      res.json({ count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get unread count" });
+    }
+  });
+
+  app.post("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.markNotificationRead(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark notification read" });
+    }
+  });
+
+  app.post("/api/notifications/mark-all-read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.markAllNotificationsRead(userId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark all notifications read" });
+    }
+  });
+
+  app.post("/api/posts/:id/voice-channel", isAuthenticated, async (req: any, res) => {
+    try {
+      const { maxSlots } = req.body;
+      const roomName = generateRoomName("post", req.params.id);
+      const channel = await storage.createPostVoiceChannel({
+        postId: req.params.id,
+        maxSlots: maxSlots || 4,
+        livekitRoom: roomName,
+        isActive: true,
+      });
+      res.status(201).json(channel);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create post voice channel" });
+    }
+  });
+
+  app.get("/api/posts/:id/voice-channel", async (req, res) => {
+    try {
+      const channel = await storage.getPostVoiceChannel(req.params.id);
+      if (!channel) {
+        return res.json(null);
+      }
+      const participants = await storage.getPostVoiceParticipants(channel.id);
+      res.json({ ...channel, participants });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get post voice channel" });
+    }
+  });
+
+  app.post("/api/post-voice-channels/:id/join", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const channelId = req.params.id;
+      
+      const channel = await storage.getPostVoiceChannel(channelId);
+      if (!channel) {
+        return res.status(404).json({ error: "Voice channel not found" });
+      }
+      
+      if (channel.participantCount >= channel.maxSlots) {
+        return res.status(400).json({ error: "Voice channel is full" });
+      }
+      
+      const isInChannel = await storage.isInPostVoiceChannel(channel.id, userId);
+      if (!isInChannel) {
+        await storage.joinPostVoiceChannel({ postVoiceChannelId: channel.id, userId });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!channel.livekitRoom) {
+        return res.status(400).json({ error: "LiveKit room not configured" });
+      }
+      
+      const token = await generateLiveKitToken(
+        channel.livekitRoom,
+        user?.username || "Anonymous",
+        userId
+      );
+      
+      res.json({ token, url: getLiveKitUrl(), room: channel.livekitRoom });
+    } catch (error) {
+      console.error("Join post voice channel error:", error);
+      res.status(500).json({ error: "Failed to join voice channel" });
+    }
+  });
+
+  app.post("/api/post-voice-channels/:id/leave", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.leavePostVoiceChannel(req.params.id, userId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to leave voice channel" });
     }
   });
 
