@@ -206,7 +206,7 @@ export async function setupAuth(app: Express) {
     app.get("/api/auth/steam/return", (req, res, next) => {
       const strategyName = ensureSteamStrategy(req);
       passport.authenticate(strategyName, { failureRedirect: "/" })(req, res, () => {
-        res.redirect("/home");
+        res.redirect("/");
       });
     });
   }
