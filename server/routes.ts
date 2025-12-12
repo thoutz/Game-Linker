@@ -327,6 +327,20 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/users/:userId/games/:gameId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      if (userId !== req.params.userId) {
+        return res.status(403).json({ error: "Forbidden" });
+      }
+      await storage.deleteUserGame(req.params.gameId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Delete user game error:", error);
+      res.status(500).json({ error: "Failed to remove game" });
+    }
+  });
+
   app.get("/api/users/search", isAuthenticated, async (req, res) => {
     try {
       const query = req.query.q as string;

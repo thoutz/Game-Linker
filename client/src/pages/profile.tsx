@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2, RefreshCw } from "lucide-react";
+import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2, RefreshCw, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -107,6 +107,23 @@ export default function Profile() {
     },
     onError: () => {
       toast.error("Failed to sync Steam playtime");
+    },
+  });
+
+  const removeGameMutation = useMutation({
+    mutationFn: async (userGameId: string) => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const response = await fetch(`/api/users/${user.id}/games/${userGameId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to remove game");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["userGames", user?.id] });
+      toast.success("Game removed from your profile");
+    },
+    onError: () => {
+      toast.error("Failed to remove game");
     },
   });
 
@@ -476,7 +493,7 @@ export default function Profile() {
             ) : userGames && userGames.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {userGames.map((userGame: UserGame) => (
-                  <Card key={userGame.id} className="bg-card/40 border-border/50 hover:border-primary/50 transition-colors">
+                  <Card key={userGame.id} className="bg-card/40 border-border/50 hover:border-primary/50 transition-colors group relative">
                     <CardContent className="p-4 flex items-center gap-4">
                       {userGame.game.icon ? (
                         <img 
@@ -504,6 +521,15 @@ export default function Profile() {
                           )}
                         </div>
                       </div>
+                      <button
+                        onClick={() => removeGameMutation.mutate(userGame.id)}
+                        disabled={removeGameMutation.isPending}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/20 rounded-full"
+                        title="Remove game"
+                        data-testid={`button-remove-game-${userGame.id}`}
+                      >
+                        <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                      </button>
                     </CardContent>
                   </Card>
                 ))}

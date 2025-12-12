@@ -87,6 +87,7 @@ export interface IStorage {
   updateGame(id: string, data: Partial<InsertGame>): Promise<Game | undefined>;
   addUserGame(userGame: InsertUserGame): Promise<UserGame>;
   updateUserGame(id: string, data: { hoursPlayed?: number; rank?: string }): Promise<UserGame | undefined>;
+  deleteUserGame(id: string): Promise<void>;
   getUserGames(userId: string): Promise<(UserGame & { game: Game })[]>;
   getUserGameByGameId(userId: string, gameId: string): Promise<UserGame | undefined>;
   
@@ -409,6 +410,10 @@ export class DatabaseStorage implements IStorage {
   async updateUserGame(id: string, data: { hoursPlayed?: number; rank?: string }): Promise<UserGame | undefined> {
     const [result] = await db.update(userGames).set(data).where(eq(userGames.id, id)).returning();
     return result;
+  }
+
+  async deleteUserGame(id: string): Promise<void> {
+    await db.delete(userGames).where(eq(userGames.id, id));
   }
 
   async getUserGames(userId: string): Promise<(UserGame & { game: Game })[]> {
