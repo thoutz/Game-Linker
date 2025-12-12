@@ -42,12 +42,22 @@ export async function registerRoutes(
       if (userId !== req.params.id) {
         return res.status(403).json({ error: "Forbidden" });
       }
+      
+      // Check username uniqueness if changing username
+      if (req.body.username) {
+        const existingUser = await storage.getUserByUsername(req.body.username);
+        if (existingUser && existingUser.id !== req.params.id) {
+          return res.status(400).json({ error: "Username already taken" });
+        }
+      }
+      
       const user = await storage.updateUser(req.params.id, req.body);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
       res.json(user);
     } catch (error) {
+      console.error("Error updating user:", error);
       res.status(500).json({ error: "Failed to update user" });
     }
   });
@@ -580,6 +590,67 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Steam games fetch error:", error);
       res.status(500).json({ error: "Failed to fetch Steam games" });
+    }
+  });
+
+  // Sync Steam playtime with user's games
+  app.post("/api/steam/sync-playtime", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.steamId) {
+        return res.status(400).json({ error: "Steam account not linked" });
+      }
+      
+      if (!process.env.STEAM_API_KEY) {
+        return res.status(500).json({ error: "Steam API not configured" });
+      }
+      
+      // Fetch Steam games
+      const steamApiUrl = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${process.env.STEAM_API_KEY}&steamid=${user.steamId}&format=json&include_appinfo=true&include_played_free_games=true`;
+      const response = await fetch(steamApiUrl);
+      if (!response.ok) {
+        throw new Error("Failed to fetch Steam games");
+      }
+      
+      const data = await response.json();
+      const steamGames = data.response?.games || [];
+      
+      // Get user's games from database
+      const userGames = await storage.getUserGames(userId);
+      let syncedCount = 0;
+      
+      // Match and update playtime for each user game
+      for (const userGame of userGames) {
+        const gameName = userGame.game.name.toLowerCase();
+        
+        // Try to find matching Steam game by name (fuzzy match)
+        const matchedSteamGame = steamGames.find((sg: any) => {
+          const steamName = sg.name?.toLowerCase() || "";
+          return steamName === gameName || 
+                 steamName.includes(gameName) || 
+                 gameName.includes(steamName) ||
+                 // Handle common variations
+                 steamName.replace(/[^a-z0-9]/g, "") === gameName.replace(/[^a-z0-9]/g, "");
+        });
+        
+        if (matchedSteamGame) {
+          const hoursPlayed = Math.round(matchedSteamGame.playtime_forever / 60);
+          await storage.updateUserGame(userGame.id, { hoursPlayed });
+          
+          // Also update the game's steamAppId if not set
+          if (!userGame.game.steamAppId) {
+            await storage.updateGame(userGame.game.id, { steamAppId: matchedSteamGame.appid });
+          }
+          syncedCount++;
+        }
+      }
+      
+      res.json({ synced: syncedCount, total: userGames.length });
+    } catch (error) {
+      console.error("Steam playtime sync error:", error);
+      res.status(500).json({ error: "Failed to sync Steam playtime" });
     }
   });
 

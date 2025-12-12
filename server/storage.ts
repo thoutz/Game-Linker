@@ -84,8 +84,11 @@ export interface IStorage {
   getGames(): Promise<Game[]>;
   getGameByName(name: string): Promise<Game | undefined>;
   createGame(game: InsertGame): Promise<Game>;
+  updateGame(id: string, data: Partial<InsertGame>): Promise<Game | undefined>;
   addUserGame(userGame: InsertUserGame): Promise<UserGame>;
+  updateUserGame(id: string, data: { hoursPlayed?: number; rank?: string }): Promise<UserGame | undefined>;
   getUserGames(userId: string): Promise<(UserGame & { game: Game })[]>;
+  getUserGameByGameId(userId: string, gameId: string): Promise<UserGame | undefined>;
   
   getVoiceChannels(communityId: string): Promise<(VoiceChannel & { participantCount: number })[]>;
   getVoiceChannel(id: string): Promise<VoiceChannel | undefined>;
@@ -393,8 +396,18 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
+  async updateGame(id: string, data: Partial<InsertGame>): Promise<Game | undefined> {
+    const [game] = await db.update(games).set(data).where(eq(games.id, id)).returning();
+    return game;
+  }
+
   async addUserGame(userGame: InsertUserGame): Promise<UserGame> {
     const [result] = await db.insert(userGames).values(userGame).returning();
+    return result;
+  }
+
+  async updateUserGame(id: string, data: { hoursPlayed?: number; rank?: string }): Promise<UserGame | undefined> {
+    const [result] = await db.update(userGames).set(data).where(eq(userGames.id, id)).returning();
     return result;
   }
 
@@ -406,6 +419,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userGames.userId, userId));
     
     return result.map(r => ({ ...r.user_games, game: r.games }));
+  }
+
+  async getUserGameByGameId(userId: string, gameId: string): Promise<UserGame | undefined> {
+    const [result] = await db
+      .select()
+      .from(userGames)
+      .where(and(eq(userGames.userId, userId), eq(userGames.gameId, gameId)));
+    return result;
   }
 
   async getVoiceChannels(communityId: string): Promise<(VoiceChannel & { participantCount: number })[]> {
