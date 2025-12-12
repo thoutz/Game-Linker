@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { LiveKitRoom, RoomAudioRenderer, useParticipants } from "@livekit/components-react";
@@ -13,6 +13,8 @@ import { Mic, MicOff, PhoneOff, Users, Loader2, Heart, MessageCircle, Send } fro
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { linkifyContent, extractUrls } from "@/lib/linkify";
+import { LinkPreview } from "@/components/link-preview";
 
 interface Post {
   id: string;
@@ -220,7 +222,13 @@ export function PostWithVoice({ post }: PostWithVoiceProps) {
               {new Date(post.createdAt).toLocaleString()}
             </span>
           </div>
-          <p className="mt-1 text-sm">{post.content}</p>
+          <p className="mt-2 text-sm whitespace-pre-wrap break-words leading-relaxed">
+            {linkifyContent(post.content)}
+          </p>
+          
+          {extractUrls(post.content).slice(0, 1).map((url) => (
+            <LinkPreview key={url} url={url} />
+          ))}
 
           {voiceChannel && voiceChannel.isActive && (
             <Card className={cn(

@@ -541,6 +541,102 @@ export async function registerRoutes(
     });
   });
 
+  app.get("/api/link-preview", async (req, res) => {
+    try {
+      const url = req.query.url as string;
+      if (!url) {
+        return res.status(400).json({ error: "URL is required" });
+      }
+
+      const parsedUrl = new URL(url);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        return res.status(400).json({ error: "Invalid URL protocol" });
+      }
+
+      const hostname = parsedUrl.hostname.toLowerCase();
+      const blockedPatterns = [
+        /^localhost$/i,
+        /^127\./,
+        /^10\./,
+        /^172\.(1[6-9]|2[0-9]|3[01])\./,
+        /^192\.168\./,
+        /^169\.254\./,
+        /^0\./,
+        /^\[::1\]$/,
+        /^\[::\]$/,
+        /\.local$/i,
+        /\.internal$/i,
+        /\.localhost$/i,
+      ];
+      
+      if (blockedPatterns.some(pattern => pattern.test(hostname))) {
+        return res.status(400).json({ error: "URL not allowed" });
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; LinkPreview/1.0)",
+          "Accept": "text/html",
+        },
+        signal: controller.signal,
+        redirect: "follow",
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        return res.status(400).json({ error: "Failed to fetch URL" });
+      }
+
+      const contentLength = response.headers.get("content-length");
+      if (contentLength && parseInt(contentLength) > 1024 * 1024) {
+        return res.status(400).json({ error: "Response too large" });
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/html")) {
+        return res.json({ url, title: parsedUrl.hostname });
+      }
+
+      const html = (await response.text()).slice(0, 100000);
+      const getMetaContent = (name: string): string | undefined => {
+        const patterns = [
+          new RegExp(`<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']+)["']`, "i"),
+          new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${name}["']`, "i"),
+        ];
+        for (const pattern of patterns) {
+          const match = html.match(pattern);
+          if (match) return match[1];
+        }
+        return undefined;
+      };
+
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const title = getMetaContent("og:title") || getMetaContent("twitter:title") || (titleMatch ? titleMatch[1] : undefined);
+      const description = getMetaContent("og:description") || getMetaContent("twitter:description") || getMetaContent("description");
+      const image = getMetaContent("og:image") || getMetaContent("twitter:image");
+      const siteName = getMetaContent("og:site_name");
+
+      let absoluteImage = image;
+      if (image && !image.startsWith("http")) {
+        absoluteImage = new URL(image, url).toString();
+      }
+
+      res.json({
+        url,
+        title: title?.slice(0, 200),
+        description: description?.slice(0, 500),
+        image: absoluteImage,
+        siteName: siteName || parsedUrl.hostname,
+      });
+    } catch (error: any) {
+      console.error("Link preview error:", error.message);
+      res.status(400).json({ error: "Failed to fetch preview" });
+    }
+  });
+
   app.get("/api/communities/:id/voice-channels", async (req, res) => {
     try {
       const channels = await storage.getVoiceChannels(req.params.id);
