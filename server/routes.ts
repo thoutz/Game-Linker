@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertCommunitySchema, insertPostSchema, insertSessionSchema, insertMessageSchema, insertFriendshipSchema, insertVoiceChannelSchema, insertNotificationSchema } from "@shared/schema";
+import { insertCommunitySchema, insertPostSchema, insertSessionSchema, insertMessageSchema, insertFriendshipSchema, insertFriendRequestSchema, insertVoiceChannelSchema, insertNotificationSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 import { generateLiveKitToken, generateRoomName, isLiveKitConfigured, getLiveKitUrl } from "./livekit";
 
@@ -91,6 +91,127 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to remove friend" });
+    }
+  });
+
+  app.post("/api/friend-requests", isAuthenticated, async (req: any, res) => {
+    try {
+      const requesterId = req.user.claims.sub;
+      const { recipientId } = req.body;
+
+      if (requesterId === recipientId) {
+        return res.status(400).json({ error: "Cannot send friend request to yourself" });
+      }
+
+      const alreadyFriends = await storage.areFriends(requesterId, recipientId);
+      if (alreadyFriends) {
+        return res.status(400).json({ error: "Already friends" });
+      }
+
+      const existingRequest = await storage.getPendingRequestBetweenUsers(requesterId, recipientId);
+      if (existingRequest) {
+        return res.status(400).json({ error: "Friend request already pending" });
+      }
+
+      const reverseRequest = await storage.getPendingRequestBetweenUsers(recipientId, requesterId);
+      if (reverseRequest) {
+        await storage.acceptFriendRequest(reverseRequest.id);
+        return res.json({ message: "Friend request accepted - you're now friends!" });
+      }
+
+      const request = await storage.createFriendRequest({ requesterId, recipientId });
+      res.status(201).json(request);
+    } catch (error: any) {
+      console.error("Error creating friend request:", error);
+      res.status(500).json({ error: "Failed to create friend request" });
+    }
+  });
+
+  app.get("/api/friend-requests/incoming", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const requests = await storage.getIncomingFriendRequests(userId);
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get incoming friend requests" });
+    }
+  });
+
+  app.get("/api/friend-requests/outgoing", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const requests = await storage.getOutgoingFriendRequests(userId);
+      res.json(requests);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get outgoing friend requests" });
+    }
+  });
+
+  app.get("/api/friend-requests/status/:recipientId", isAuthenticated, async (req: any, res) => {
+    try {
+      const requesterId = req.user.claims.sub;
+      const { recipientId } = req.params;
+
+      const alreadyFriends = await storage.areFriends(requesterId, recipientId);
+      if (alreadyFriends) {
+        return res.json({ status: "friends" });
+      }
+
+      const outgoingRequest = await storage.getPendingRequestBetweenUsers(requesterId, recipientId);
+      if (outgoingRequest) {
+        return res.json({ status: "pending_outgoing", requestId: outgoingRequest.id });
+      }
+
+      const incomingRequest = await storage.getPendingRequestBetweenUsers(recipientId, requesterId);
+      if (incomingRequest) {
+        return res.json({ status: "pending_incoming", requestId: incomingRequest.id });
+      }
+
+      res.json({ status: "none" });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get friend request status" });
+    }
+  });
+
+  app.patch("/api/friend-requests/:id/accept", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const request = await storage.getFriendRequest(req.params.id);
+
+      if (!request) {
+        return res.status(404).json({ error: "Friend request not found" });
+      }
+
+      if (request.recipientId !== userId) {
+        return res.status(403).json({ error: "Not authorized to accept this request" });
+      }
+
+      await storage.acceptFriendRequest(req.params.id);
+      res.json({ message: "Friend request accepted" });
+    } catch (error) {
+      console.error("Error accepting friend request:", error);
+      res.status(500).json({ error: "Failed to accept friend request" });
+    }
+  });
+
+  app.patch("/api/friend-requests/:id/reject", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const request = await storage.getFriendRequest(req.params.id);
+
+      if (!request) {
+        return res.status(404).json({ error: "Friend request not found" });
+      }
+
+      if (request.recipientId !== userId) {
+        return res.status(403).json({ error: "Not authorized to reject this request" });
+      }
+
+      await storage.rejectFriendRequest(req.params.id);
+      res.json({ message: "Friend request rejected" });
+    } catch (error) {
+      console.error("Error rejecting friend request:", error);
+      res.status(500).json({ error: "Failed to reject friend request" });
     }
   });
 

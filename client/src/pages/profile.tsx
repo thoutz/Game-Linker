@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2, RefreshCw, X, UserPlus, MessageCircle } from "lucide-react";
+import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2, RefreshCw, X, UserPlus, MessageCircle, UserCheck, UserX, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -86,23 +86,86 @@ export default function Profile({ params }: { params?: { id?: string } }) {
     enabled: !!profileUserId,
   });
 
-  const addFriendMutation = useMutation({
+  const { data: friendshipStatus } = useQuery({
+    queryKey: ["friendshipStatus", viewingUserId],
+    queryFn: async () => {
+      const response = await fetch(`/api/friend-requests/status/${viewingUserId}`);
+      if (!response.ok) return { status: "none" };
+      return response.json();
+    },
+    enabled: !!viewingUserId && !!user?.id && viewingUserId !== user?.id,
+  });
+
+  const { data: incomingRequests = [], refetch: refetchIncoming } = useQuery({
+    queryKey: ["incomingFriendRequests"],
+    queryFn: async () => {
+      const response = await fetch("/api/friend-requests/incoming");
+      if (!response.ok) return [];
+      return response.json();
+    },
+    enabled: isOwnProfile && !!user?.id,
+  });
+
+  const sendFriendRequestMutation = useMutation({
     mutationFn: async () => {
-      if (!user?.id || !viewingUserId) throw new Error("Cannot add friend");
-      const response = await fetch("/api/friendships", {
+      if (!user?.id || !viewingUserId) throw new Error("Cannot send friend request");
+      const response = await fetch("/api/friend-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, friendId: viewingUserId }),
+        body: JSON.stringify({ recipientId: viewingUserId }),
       });
-      if (!response.ok) throw new Error("Failed to add friend");
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to send friend request");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["friendshipStatus", viewingUserId] });
+      if (data.message?.includes("accepted")) {
+        toast.success("You're now friends!");
+      } else {
+        toast.success("Friend request sent!");
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to send friend request");
+    },
+  });
+
+  const acceptRequestMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const response = await fetch(`/api/friend-requests/${requestId}/accept`, {
+        method: "PATCH",
+      });
+      if (!response.ok) throw new Error("Failed to accept request");
       return response.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incomingFriendRequests"] });
       queryClient.invalidateQueries({ queryKey: ["friends"] });
-      toast.success("Friend added!");
+      queryClient.invalidateQueries({ queryKey: ["friendshipStatus"] });
+      toast.success("Friend request accepted!");
     },
     onError: () => {
-      toast.error("Failed to add friend");
+      toast.error("Failed to accept friend request");
+    },
+  });
+
+  const rejectRequestMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const response = await fetch(`/api/friend-requests/${requestId}/reject`, {
+        method: "PATCH",
+      });
+      if (!response.ok) throw new Error("Failed to reject request");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["incomingFriendRequests"] });
+      toast.success("Friend request rejected");
+    },
+    onError: () => {
+      toast.error("Failed to reject friend request");
     },
   });
 
@@ -393,15 +456,48 @@ export default function Profile({ params }: { params?: { id?: string } }) {
                 </>
               ) : (
                 <>
-                  <Button 
-                    onClick={() => addFriendMutation.mutate()} 
-                    disabled={addFriendMutation.isPending}
-                    size="sm" 
-                    data-testid="button-add-friend-profile"
-                  >
-                    {addFriendMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
-                    Add Friend
-                  </Button>
+                  {friendshipStatus?.status === "friends" ? (
+                    <Button variant="secondary" size="sm" disabled data-testid="button-already-friends">
+                      <Users className="w-4 h-4 mr-2" />
+                      Friends
+                    </Button>
+                  ) : friendshipStatus?.status === "pending_outgoing" ? (
+                    <Button variant="secondary" size="sm" disabled data-testid="button-request-sent">
+                      <Check className="w-4 h-4 mr-2" />
+                      Request Sent
+                    </Button>
+                  ) : friendshipStatus?.status === "pending_incoming" ? (
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={() => acceptRequestMutation.mutate(friendshipStatus.requestId)} 
+                        disabled={acceptRequestMutation.isPending}
+                        size="sm" 
+                        data-testid="button-accept-request"
+                      >
+                        {acceptRequestMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserCheck className="w-4 h-4 mr-2" />}
+                        Accept
+                      </Button>
+                      <Button 
+                        onClick={() => rejectRequestMutation.mutate(friendshipStatus.requestId)} 
+                        disabled={rejectRequestMutation.isPending}
+                        variant="outline"
+                        size="sm" 
+                        data-testid="button-reject-request"
+                      >
+                        {rejectRequestMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button 
+                      onClick={() => sendFriendRequestMutation.mutate()} 
+                      disabled={sendFriendRequestMutation.isPending}
+                      size="sm" 
+                      data-testid="button-add-friend-profile"
+                    >
+                      {sendFriendRequestMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                      Add Friend
+                    </Button>
+                  )}
                   <Button 
                     onClick={() => setLocation("/messages")} 
                     variant="outline" 
@@ -506,6 +602,64 @@ export default function Profile({ params }: { params?: { id?: string } }) {
             </Button>
           </DialogContent>
         </Dialog>
+        )}
+
+        {isOwnProfile && incomingRequests.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/30">
+              <CardContent className="p-4">
+                <h3 className="text-lg font-display font-bold mb-3 flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-primary" />
+                  Friend Requests ({incomingRequests.length})
+                </h3>
+                <div className="space-y-3">
+                  {incomingRequests.map((request: any) => (
+                    <div 
+                      key={request.id} 
+                      className="flex items-center justify-between bg-card/50 rounded-lg p-3"
+                      data-testid={`friend-request-${request.id}`}
+                    >
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer"
+                        onClick={() => setLocation(`/profile/${request.requester.id}`)}
+                      >
+                        <Avatar className="w-10 h-10">
+                          <AvatarImage src={request.requester.profileImageUrl || request.requester.avatar} />
+                          <AvatarFallback>{request.requester.username?.substring(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{request.requester.displayName || request.requester.username}</p>
+                          <p className="text-sm text-muted-foreground">@{request.requester.username}</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => acceptRequestMutation.mutate(request.id)}
+                          disabled={acceptRequestMutation.isPending}
+                          size="sm"
+                          data-testid={`accept-request-${request.id}`}
+                        >
+                          {acceptRequestMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                        </Button>
+                        <Button
+                          onClick={() => rejectRequestMutation.mutate(request.id)}
+                          disabled={rejectRequestMutation.isPending}
+                          variant="outline"
+                          size="sm"
+                          data-testid={`reject-request-${request.id}`}
+                        >
+                          {rejectRequestMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         )}
 
         {showQR && isOwnProfile && (

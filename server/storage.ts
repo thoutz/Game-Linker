@@ -17,6 +17,8 @@ import {
   type InsertMessage,
   type Friendship,
   type InsertFriendship,
+  type FriendRequest,
+  type InsertFriendRequest,
   type CommunityMember,
   type InsertCommunityMember,
   type Game,
@@ -41,6 +43,7 @@ import {
   gamingSessions,
   messages,
   friendships,
+  friendRequests,
   communityMembers,
   games,
   userGames,
@@ -65,6 +68,15 @@ export interface IStorage {
   getFriends(userId: string): Promise<User[]>;
   addFriend(friendship: InsertFriendship): Promise<Friendship>;
   removeFriend(userId: string, friendId: string): Promise<void>;
+  areFriends(userId: string, friendId: string): Promise<boolean>;
+  
+  createFriendRequest(request: InsertFriendRequest): Promise<FriendRequest>;
+  getFriendRequest(id: string): Promise<FriendRequest | undefined>;
+  getIncomingFriendRequests(userId: string): Promise<(FriendRequest & { requester: User })[]>;
+  getOutgoingFriendRequests(userId: string): Promise<(FriendRequest & { recipient: User })[]>;
+  getPendingRequestBetweenUsers(requesterId: string, recipientId: string): Promise<FriendRequest | undefined>;
+  acceptFriendRequest(requestId: string): Promise<void>;
+  rejectFriendRequest(requestId: string): Promise<void>;
   
   getCommunities(): Promise<Community[]>;
   getCommunitiesWithMemberCount(): Promise<(Community & { memberCount: number })[]>;
@@ -217,6 +229,103 @@ export class DatabaseStorage implements IStorage {
         eq(friendships.friendId, friendId)
       )
     );
+  }
+
+  async areFriends(userId: string, friendId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(friendships)
+      .where(
+        and(
+          eq(friendships.userId, userId),
+          eq(friendships.friendId, friendId)
+        )
+      );
+    return !!result;
+  }
+
+  async createFriendRequest(request: InsertFriendRequest): Promise<FriendRequest> {
+    const [created] = await db.insert(friendRequests).values(request).returning();
+    return created;
+  }
+
+  async getFriendRequest(id: string): Promise<FriendRequest | undefined> {
+    const [request] = await db.select().from(friendRequests).where(eq(friendRequests.id, id));
+    return request;
+  }
+
+  async getIncomingFriendRequests(userId: string): Promise<(FriendRequest & { requester: User })[]> {
+    const results = await db
+      .select()
+      .from(friendRequests)
+      .innerJoin(users, eq(friendRequests.requesterId, users.id))
+      .where(
+        and(
+          eq(friendRequests.recipientId, userId),
+          eq(friendRequests.status, "pending")
+        )
+      )
+      .orderBy(desc(friendRequests.createdAt));
+    
+    return results.map(r => ({
+      ...r.friend_requests,
+      requester: r.users,
+    }));
+  }
+
+  async getOutgoingFriendRequests(userId: string): Promise<(FriendRequest & { recipient: User })[]> {
+    const results = await db
+      .select()
+      .from(friendRequests)
+      .innerJoin(users, eq(friendRequests.recipientId, users.id))
+      .where(
+        and(
+          eq(friendRequests.requesterId, userId),
+          eq(friendRequests.status, "pending")
+        )
+      )
+      .orderBy(desc(friendRequests.createdAt));
+    
+    return results.map(r => ({
+      ...r.friend_requests,
+      recipient: r.users,
+    }));
+  }
+
+  async getPendingRequestBetweenUsers(requesterId: string, recipientId: string): Promise<FriendRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(friendRequests)
+      .where(
+        and(
+          eq(friendRequests.requesterId, requesterId),
+          eq(friendRequests.recipientId, recipientId),
+          eq(friendRequests.status, "pending")
+        )
+      );
+    return request;
+  }
+
+  async acceptFriendRequest(requestId: string): Promise<void> {
+    const request = await this.getFriendRequest(requestId);
+    if (!request || request.status !== "pending") {
+      throw new Error("Friend request not found or already processed");
+    }
+
+    await db.update(friendRequests)
+      .set({ status: "accepted", updatedAt: new Date() })
+      .where(eq(friendRequests.id, requestId));
+
+    await db.insert(friendships).values([
+      { userId: request.requesterId, friendId: request.recipientId },
+      { userId: request.recipientId, friendId: request.requesterId },
+    ]);
+  }
+
+  async rejectFriendRequest(requestId: string): Promise<void> {
+    await db.update(friendRequests)
+      .set({ status: "rejected", updatedAt: new Date() })
+      .where(eq(friendRequests.id, requestId));
   }
 
   async getCommunities(): Promise<Community[]> {

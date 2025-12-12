@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserPlus, Search, Loader2 } from "lucide-react";
+import { UserPlus, Search, Loader2, Check, Users } from "lucide-react";
 import { toast } from "sonner";
 
 interface UserResult {
@@ -36,27 +36,32 @@ export default function AddFriendDialog() {
     retry: false,
   });
 
-  const addFriendMutation = useMutation({
-    mutationFn: async (friendId: string) => {
-      const response = await fetch("/api/friendships", {
+  const sendFriendRequestMutation = useMutation({
+    mutationFn: async (recipientId: string) => {
+      const response = await fetch("/api/friend-requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: user?.id,
-          friendId,
-        }),
+        body: JSON.stringify({ recipientId }),
       });
-      if (!response.ok) throw new Error("Failed to add friend");
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to send friend request");
+      }
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["friends"] });
-      toast.success("Friend added!");
+      queryClient.invalidateQueries({ queryKey: ["friendshipStatus"] });
+      if (data.message?.includes("accepted")) {
+        toast.success("You're now friends!");
+      } else {
+        toast.success("Friend request sent!");
+      }
       setOpen(false);
       setSearch("");
     },
-    onError: () => {
-      toast.error("Failed to add friend");
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to send friend request");
     },
   });
 
@@ -112,11 +117,11 @@ export default function AddFriendDialog() {
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => addFriendMutation.mutate(u.id)}
-                    disabled={addFriendMutation.isPending}
+                    onClick={() => sendFriendRequestMutation.mutate(u.id)}
+                    disabled={sendFriendRequestMutation.isPending}
                     data-testid={`button-add-friend-${u.id}`}
                   >
-                    {addFriendMutation.isPending ? (
+                    {sendFriendRequestMutation.isPending ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <UserPlus className="w-4 h-4" />
