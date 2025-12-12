@@ -19,6 +19,16 @@ import {
   type InsertGame,
   type UserGame,
   type InsertUserGame,
+  type VoiceChannel,
+  type InsertVoiceChannel,
+  type VoiceChannelParticipant,
+  type InsertVoiceChannelParticipant,
+  type Notification,
+  type InsertNotification,
+  type PostVoiceChannel,
+  type InsertPostVoiceChannel,
+  type PostVoiceParticipant,
+  type InsertPostVoiceParticipant,
   users,
   communities,
   posts,
@@ -27,7 +37,12 @@ import {
   friendships,
   communityMembers,
   games,
-  userGames
+  userGames,
+  voiceChannels,
+  voiceChannelParticipants,
+  notifications,
+  postVoiceChannels,
+  postVoiceParticipants
 } from "@shared/schema";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 
@@ -69,6 +84,28 @@ export interface IStorage {
   createGame(game: InsertGame): Promise<Game>;
   addUserGame(userGame: InsertUserGame): Promise<UserGame>;
   getUserGames(userId: string): Promise<(UserGame & { game: Game })[]>;
+  
+  getVoiceChannels(communityId: string): Promise<(VoiceChannel & { participantCount: number })[]>;
+  getVoiceChannel(id: string): Promise<VoiceChannel | undefined>;
+  createVoiceChannel(channel: InsertVoiceChannel): Promise<VoiceChannel>;
+  deleteVoiceChannel(id: string): Promise<void>;
+  joinVoiceChannel(participant: InsertVoiceChannelParticipant): Promise<VoiceChannelParticipant>;
+  leaveVoiceChannel(channelId: string, userId: string): Promise<void>;
+  getVoiceChannelParticipants(channelId: string): Promise<(VoiceChannelParticipant & { user: User })[]>;
+  isInVoiceChannel(channelId: string, userId: string): Promise<boolean>;
+  
+  getNotifications(userId: string): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: string): Promise<void>;
+  markAllNotificationsRead(userId: string): Promise<void>;
+  
+  createPostVoiceChannel(channel: InsertPostVoiceChannel): Promise<PostVoiceChannel>;
+  getPostVoiceChannel(postId: string): Promise<(PostVoiceChannel & { participantCount: number }) | undefined>;
+  joinPostVoiceChannel(participant: InsertPostVoiceParticipant): Promise<PostVoiceParticipant>;
+  leavePostVoiceChannel(postVoiceChannelId: string, userId: string): Promise<void>;
+  getPostVoiceParticipants(postVoiceChannelId: string): Promise<(PostVoiceParticipant & { user: User })[]>;
+  isInPostVoiceChannel(postVoiceChannelId: string, userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -344,6 +381,170 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userGames.userId, userId));
     
     return result.map(r => ({ ...r.user_games, game: r.games }));
+  }
+
+  async getVoiceChannels(communityId: string): Promise<(VoiceChannel & { participantCount: number })[]> {
+    const channels = await db
+      .select()
+      .from(voiceChannels)
+      .where(eq(voiceChannels.communityId, communityId))
+      .orderBy(voiceChannels.createdAt);
+    
+    if (channels.length === 0) return [];
+    
+    const counts = await db
+      .select({
+        channelId: voiceChannelParticipants.channelId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(voiceChannelParticipants)
+      .groupBy(voiceChannelParticipants.channelId);
+    
+    const countMap = new Map(counts.map(c => [c.channelId, c.count]));
+    
+    return channels.map(channel => ({
+      ...channel,
+      participantCount: countMap.get(channel.id) || 0,
+    }));
+  }
+
+  async getVoiceChannel(id: string): Promise<VoiceChannel | undefined> {
+    const [channel] = await db.select().from(voiceChannels).where(eq(voiceChannels.id, id));
+    return channel;
+  }
+
+  async createVoiceChannel(channel: InsertVoiceChannel): Promise<VoiceChannel> {
+    const [result] = await db.insert(voiceChannels).values(channel).returning();
+    return result;
+  }
+
+  async deleteVoiceChannel(id: string): Promise<void> {
+    await db.delete(voiceChannels).where(eq(voiceChannels.id, id));
+  }
+
+  async joinVoiceChannel(participant: InsertVoiceChannelParticipant): Promise<VoiceChannelParticipant> {
+    const [result] = await db.insert(voiceChannelParticipants).values(participant).returning();
+    return result;
+  }
+
+  async leaveVoiceChannel(channelId: string, userId: string): Promise<void> {
+    await db.delete(voiceChannelParticipants).where(
+      and(
+        eq(voiceChannelParticipants.channelId, channelId),
+        eq(voiceChannelParticipants.userId, userId)
+      )
+    );
+  }
+
+  async getVoiceChannelParticipants(channelId: string): Promise<(VoiceChannelParticipant & { user: User })[]> {
+    const result = await db
+      .select()
+      .from(voiceChannelParticipants)
+      .innerJoin(users, eq(voiceChannelParticipants.userId, users.id))
+      .where(eq(voiceChannelParticipants.channelId, channelId));
+    
+    return result.map(r => ({ ...r.voice_channel_participants, user: r.users }));
+  }
+
+  async isInVoiceChannel(channelId: string, userId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(voiceChannelParticipants)
+      .where(
+        and(
+          eq(voiceChannelParticipants.channelId, channelId),
+          eq(voiceChannelParticipants.userId, userId)
+        )
+      );
+    return !!result;
+  }
+
+  async getNotifications(userId: string): Promise<Notification[]> {
+    return db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
+    return result[0]?.count || 0;
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    const [result] = await db.insert(notifications).values(notification).returning();
+    return result;
+  }
+
+  async markNotificationRead(id: string): Promise<void> {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db.update(notifications).set({ isRead: true }).where(eq(notifications.userId, userId));
+  }
+
+  async createPostVoiceChannel(channel: InsertPostVoiceChannel): Promise<PostVoiceChannel> {
+    const [result] = await db.insert(postVoiceChannels).values(channel).returning();
+    return result;
+  }
+
+  async getPostVoiceChannel(postId: string): Promise<(PostVoiceChannel & { participantCount: number }) | undefined> {
+    const [channel] = await db
+      .select()
+      .from(postVoiceChannels)
+      .where(eq(postVoiceChannels.postId, postId));
+    
+    if (!channel) return undefined;
+    
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(postVoiceParticipants)
+      .where(eq(postVoiceParticipants.postVoiceChannelId, channel.id));
+    
+    return { ...channel, participantCount: countResult?.count || 0 };
+  }
+
+  async joinPostVoiceChannel(participant: InsertPostVoiceParticipant): Promise<PostVoiceParticipant> {
+    const [result] = await db.insert(postVoiceParticipants).values(participant).returning();
+    return result;
+  }
+
+  async leavePostVoiceChannel(postVoiceChannelId: string, userId: string): Promise<void> {
+    await db.delete(postVoiceParticipants).where(
+      and(
+        eq(postVoiceParticipants.postVoiceChannelId, postVoiceChannelId),
+        eq(postVoiceParticipants.userId, userId)
+      )
+    );
+  }
+
+  async getPostVoiceParticipants(postVoiceChannelId: string): Promise<(PostVoiceParticipant & { user: User })[]> {
+    const result = await db
+      .select()
+      .from(postVoiceParticipants)
+      .innerJoin(users, eq(postVoiceParticipants.userId, users.id))
+      .where(eq(postVoiceParticipants.postVoiceChannelId, postVoiceChannelId));
+    
+    return result.map(r => ({ ...r.post_voice_participants, user: r.users }));
+  }
+
+  async isInPostVoiceChannel(postVoiceChannelId: string, userId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(postVoiceParticipants)
+      .where(
+        and(
+          eq(postVoiceParticipants.postVoiceChannelId, postVoiceChannelId),
+          eq(postVoiceParticipants.userId, userId)
+        )
+      );
+    return !!result;
   }
 }
 

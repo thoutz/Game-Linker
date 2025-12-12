@@ -154,3 +154,81 @@ export const insertMessageSchema = createInsertSchema(messages).omit({
 });
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Message = typeof messages.$inferSelect;
+
+export const voiceChannels = pgTable("voice_channels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  communityId: varchar("community_id").notNull().references(() => communities.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  maxParticipants: integer("max_participants").notNull().default(10),
+  livekitRoom: text("livekit_room"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertVoiceChannelSchema = createInsertSchema(voiceChannels).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertVoiceChannel = z.infer<typeof insertVoiceChannelSchema>;
+export type VoiceChannel = typeof voiceChannels.$inferSelect;
+
+export const voiceChannelParticipants = pgTable("voice_channel_participants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  channelId: varchar("channel_id").notNull().references(() => voiceChannels.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+});
+
+export const insertVoiceChannelParticipantSchema = createInsertSchema(voiceChannelParticipants).omit({
+  id: true,
+  joinedAt: true,
+});
+export type InsertVoiceChannelParticipant = z.infer<typeof insertVoiceChannelParticipantSchema>;
+export type VoiceChannelParticipant = typeof voiceChannelParticipants.$inferSelect;
+
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  link: text("link"),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
+
+export const postVoiceChannels = pgTable("post_voice_channels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postId: varchar("post_id").notNull().references(() => posts.id, { onDelete: "cascade" }),
+  maxSlots: integer("max_slots").notNull().default(4),
+  livekitRoom: text("livekit_room"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPostVoiceChannelSchema = createInsertSchema(postVoiceChannels).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPostVoiceChannel = z.infer<typeof insertPostVoiceChannelSchema>;
+export type PostVoiceChannel = typeof postVoiceChannels.$inferSelect;
+
+export const postVoiceParticipants = pgTable("post_voice_participants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  postVoiceChannelId: varchar("post_voice_channel_id").notNull().references(() => postVoiceChannels.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+});
+
+export const insertPostVoiceParticipantSchema = createInsertSchema(postVoiceParticipants).omit({
+  id: true,
+  joinedAt: true,
+});
+export type InsertPostVoiceParticipant = z.infer<typeof insertPostVoiceParticipantSchema>;
+export type PostVoiceParticipant = typeof postVoiceParticipants.$inferSelect;
