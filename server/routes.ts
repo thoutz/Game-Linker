@@ -537,5 +537,59 @@ export async function registerRoutes(
     }
   });
 
+  // Steam Games API
+  app.get("/api/steam/games", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.steamId) {
+        return res.status(400).json({ error: "Steam account not linked" });
+      }
+      
+      if (!process.env.STEAM_API_KEY) {
+        return res.status(500).json({ error: "Steam API not configured" });
+      }
+      
+      // Fetch owned games from Steam Web API
+      const steamApiUrl = `https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=${process.env.STEAM_API_KEY}&steamid=${user.steamId}&format=json&include_appinfo=true&include_played_free_games=true`;
+      
+      const response = await fetch(steamApiUrl);
+      if (!response.ok) {
+        throw new Error("Failed to fetch Steam games");
+      }
+      
+      const data = await response.json();
+      const games = data.response?.games || [];
+      
+      // Format the response
+      const formattedGames = games.map((game: any) => ({
+        appId: game.appid,
+        name: game.name,
+        playtimeForever: game.playtime_forever, // in minutes
+        playtimeRecent: game.playtime_2weeks || 0, // in minutes
+        icon: game.img_icon_url 
+          ? `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_icon_url}.jpg`
+          : null,
+        logo: game.img_logo_url
+          ? `https://media.steampowered.com/steamcommunity/public/images/apps/${game.appid}/${game.img_logo_url}.jpg`
+          : null,
+      })).sort((a: any, b: any) => b.playtimeForever - a.playtimeForever);
+      
+      res.json({ games: formattedGames, totalCount: games.length });
+    } catch (error) {
+      console.error("Steam games fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch Steam games" });
+    }
+  });
+
+  // Check if Steam auth is available
+  app.get("/api/auth/steam/status", (req, res) => {
+    res.json({ 
+      available: !!process.env.STEAM_API_KEY,
+      linked: !!(req.user as any)?.claims?.sub && false // Would need to check user's steamId
+    });
+  });
+
   return httpServer;
 }

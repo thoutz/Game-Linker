@@ -49,7 +49,9 @@ import { eq, and, or, desc, sql } from "drizzle-orm";
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserBySteamId(steamId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  createSteamUser(data: { steamId: string; username: string; avatar?: string; profileImageUrl?: string; steamProfileUrl?: string }): Promise<User>;
   updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   searchUsers(query: string): Promise<User[]>;
@@ -119,8 +121,31 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async getUserBySteamId(steamId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.steamId, steamId));
+    return user;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async createSteamUser(data: { steamId: string; username: string; avatar?: string; profileImageUrl?: string; steamProfileUrl?: string }): Promise<User> {
+    // Ensure unique username by appending steam ID if needed
+    let username = data.username;
+    const existingUser = await this.getUserByUsername(username);
+    if (existingUser) {
+      username = `${data.username}_${data.steamId.slice(-6)}`;
+    }
+    
+    const [user] = await db.insert(users).values({
+      username,
+      steamId: data.steamId,
+      avatar: data.avatar,
+      profileImageUrl: data.profileImageUrl,
+      steamProfileUrl: data.steamProfileUrl,
+    }).returning();
     return user;
   }
 

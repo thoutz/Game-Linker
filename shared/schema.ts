@@ -24,6 +24,8 @@ export const users = pgTable("users", {
   bio: text("bio"),
   status: text("status").notNull().default("offline"),
   statusText: text("status_text"),
+  steamId: text("steam_id"),
+  steamProfileUrl: text("steam_profile_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -1,5 +1,6 @@
 import * as client from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
+import SteamStrategy from "passport-steam";
 
 import passport from "passport";
 import session from "express-session";
@@ -133,6 +134,82 @@ export async function setupAuth(app: Express) {
       );
     });
   });
+
+  // Steam Authentication
+  if (process.env.STEAM_API_KEY) {
+    const getSteamReturnUrl = (req: any) => {
+      return `${req.protocol}://${req.get("host")}/api/auth/steam/return`;
+    };
+    
+    const getSteamRealm = (req: any) => {
+      return `${req.protocol}://${req.get("host")}/`;
+    };
+
+    passport.use(new SteamStrategy.Strategy({
+        returnURL: process.env.REPLIT_DEV_DOMAIN 
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/auth/steam/return`
+          : "http://localhost:5000/api/auth/steam/return",
+        realm: process.env.REPLIT_DEV_DOMAIN
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}/`
+          : "http://localhost:5000/",
+        apiKey: process.env.STEAM_API_KEY,
+        passReqToCallback: true
+      },
+      async function(req: any, identifier: string, profile: any, done: any) {
+        try {
+          const steamId = profile.id;
+          const existingUser = req.user as any;
+          
+          if (existingUser && existingUser.claims?.sub) {
+            // User is already logged in - link Steam account
+            await storage.updateUser(existingUser.claims.sub, {
+              steamId: steamId,
+              steamProfileUrl: profile._json?.profileurl || null,
+              avatar: existingUser.claims.profile_image_url || profile.photos?.[2]?.value || profile.photos?.[0]?.value,
+            });
+            return done(null, existingUser);
+          } else {
+            // New Steam-only login - create or find user by Steam ID
+            let user = await storage.getUserBySteamId(steamId);
+            if (!user) {
+              // Create new user
+              user = await storage.createSteamUser({
+                steamId: steamId,
+                username: profile.displayName || `steam_${steamId}`,
+                avatar: profile.photos?.[2]?.value || profile.photos?.[0]?.value,
+                profileImageUrl: profile.photos?.[2]?.value || profile.photos?.[0]?.value,
+                steamProfileUrl: profile._json?.profileurl,
+              });
+            }
+            // Create a session user object compatible with Replit auth
+            const sessionUser = {
+              claims: {
+                sub: user.id,
+                email: user.email,
+                first_name: user.firstName,
+                last_name: user.lastName,
+                profile_image_url: user.profileImageUrl,
+              },
+              expires_at: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+            };
+            return done(null, sessionUser);
+          }
+        } catch (error) {
+          console.error("Steam auth error:", error);
+          return done(error);
+        }
+      }
+    ));
+
+    app.get("/api/auth/steam", passport.authenticate("steam"));
+
+    app.get("/api/auth/steam/return",
+      passport.authenticate("steam", { failureRedirect: "/" }),
+      (req, res) => {
+        res.redirect("/home");
+      }
+    );
+  }
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {

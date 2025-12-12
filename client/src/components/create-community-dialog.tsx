@@ -127,6 +127,9 @@ export default function CreateCommunityDialog() {
                       onClick={() => {
                         setSelectedGame(game);
                         setGameSearch("");
+                        if (!name.trim()) {
+                          setName(`${game.name} Community`);
+                        }
                       }}
                       data-testid={`game-result-${game.id}`}
                     >
