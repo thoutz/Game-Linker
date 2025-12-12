@@ -22,14 +22,18 @@ export default function AddFriendDialog() {
   const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
 
-  const { data: searchResults, isLoading: searching } = useQuery({
+  const { data: searchResults, isLoading: searching, isError } = useQuery({
     queryKey: ["userSearch", search],
     queryFn: async () => {
       if (search.length < 2) return [];
       const response = await fetch(`/api/users/search?q=${encodeURIComponent(search)}`);
+      if (!response.ok) {
+        throw new Error("Search failed");
+      }
       return response.json();
     },
     enabled: search.length >= 2,
+    retry: false,
   });
 
   const addFriendMutation = useMutation({
@@ -86,6 +90,8 @@ export default function AddFriendDialog() {
               <div className="p-4 text-center">
                 <Loader2 className="w-5 h-5 animate-spin mx-auto text-muted-foreground" />
               </div>
+            ) : isError ? (
+              <p className="p-4 text-center text-muted-foreground text-sm">Search failed. Please try again.</p>
             ) : search.length >= 2 && filteredResults.length === 0 ? (
               <p className="p-4 text-center text-muted-foreground text-sm">No users found</p>
             ) : (

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/layout";
 import AddGameDialog from "@/components/add-game-dialog";
@@ -12,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2, RefreshCw, X } from "lucide-react";
+import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2, RefreshCw, X, UserPlus, MessageCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -42,8 +43,9 @@ const AVATAR_STYLES = [
   "open-peeps", "personas", "pixel-art", "adventurer"
 ];
 
-export default function Profile() {
+export default function Profile({ params }: { params?: { id?: string } }) {
   const { user, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -57,15 +59,51 @@ export default function Profile() {
   const [customAvatarUrl, setCustomAvatarUrl] = useState("");
   const queryClient = useQueryClient();
 
-  const { data: userGames, isLoading: gamesLoading } = useQuery({
-    queryKey: ["userGames", user?.id],
+  const viewingUserId = params?.id;
+  const isOwnProfile = !viewingUserId || viewingUserId === user?.id;
+  const profileUserId = viewingUserId || user?.id;
+
+  const { data: viewingUser, isLoading: viewingUserLoading } = useQuery({
+    queryKey: ["viewingUser", viewingUserId],
     queryFn: async () => {
-      if (!user?.id) return [];
-      const response = await fetch(`/api/users/${user.id}/games`);
+      const response = await fetch(`/api/users/${viewingUserId}`);
+      if (!response.ok) throw new Error("User not found");
+      return response.json();
+    },
+    enabled: !!viewingUserId && viewingUserId !== user?.id,
+  });
+
+  const profileUser = isOwnProfile ? user : viewingUser;
+
+  const { data: userGames, isLoading: gamesLoading } = useQuery({
+    queryKey: ["userGames", profileUserId],
+    queryFn: async () => {
+      if (!profileUserId) return [];
+      const response = await fetch(`/api/users/${profileUserId}/games`);
       if (!response.ok) return [];
       return response.json();
     },
-    enabled: !!user?.id,
+    enabled: !!profileUserId,
+  });
+
+  const addFriendMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id || !viewingUserId) throw new Error("Cannot add friend");
+      const response = await fetch("/api/friendships", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, friendId: viewingUserId }),
+      });
+      if (!response.ok) throw new Error("Failed to add friend");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friends"] });
+      toast.success("Friend added!");
+    },
+    onError: () => {
+      toast.error("Failed to add friend");
+    },
   });
 
   const updateProfileMutation = useMutation({
@@ -178,7 +216,7 @@ export default function Profile() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || (viewingUserId && viewingUserLoading)) {
     return (
       <Layout>
         <div className="max-w-3xl mx-auto space-y-8 animate-pulse">
@@ -189,7 +227,7 @@ export default function Profile() {
     );
   }
 
-  if (!user) {
+  if (!user && !viewingUserId) {
     return (
       <Layout>
         <div className="max-w-3xl mx-auto text-center py-16">
@@ -203,10 +241,24 @@ export default function Profile() {
     );
   }
 
-  const username = user.username;
-  const displayName = user.displayName || (user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : username);
-  const avatarUrl = user.profileImageUrl || user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
-  const currentStatus = STATUS_OPTIONS.find(s => s.value === user.status) || STATUS_OPTIONS[0];
+  if (!profileUser) {
+    return (
+      <Layout>
+        <div className="max-w-3xl mx-auto text-center py-16">
+          <h1 className="text-3xl font-display font-bold mb-4">User not found</h1>
+          <p className="text-muted-foreground mb-8">This user doesn't exist or their profile is private.</p>
+          <Button onClick={() => setLocation("/")} className="bg-primary" data-testid="button-go-home">
+            Go Home
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
+
+  const username = profileUser.username;
+  const displayName = profileUser.displayName || (profileUser.firstName ? `${profileUser.firstName} ${profileUser.lastName || ''}`.trim() : username);
+  const avatarUrl = profileUser.profileImageUrl || profileUser.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+  const currentStatus = STATUS_OPTIONS.find(s => s.value === profileUser.status) || STATUS_OPTIONS[0];
 
   return (
     <Layout>
@@ -226,16 +278,17 @@ export default function Profile() {
                 <AvatarImage src={avatarUrl} className="object-cover" />
                 <AvatarFallback>{username.substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
-              <Dialog open={avatarDialogOpen} onOpenChange={setAvatarDialogOpen}>
-                <DialogTrigger asChild>
-                  <button 
-                    onClick={openAvatarDialog}
-                    className="absolute bottom-2 right-2 bg-primary p-2 rounded-full shadow-lg border-2 border-background hover:bg-primary/90 transition-colors" 
-                    data-testid="button-change-avatar"
-                  >
-                    <Camera className="w-4 h-4 text-primary-foreground" />
-                  </button>
-                </DialogTrigger>
+              {isOwnProfile && (
+                <Dialog open={avatarDialogOpen} onOpenChange={setAvatarDialogOpen}>
+                  <DialogTrigger asChild>
+                    <button 
+                      onClick={openAvatarDialog}
+                      className="absolute bottom-2 right-2 bg-primary p-2 rounded-full shadow-lg border-2 border-background hover:bg-primary/90 transition-colors" 
+                      data-testid="button-change-avatar"
+                    >
+                      <Camera className="w-4 h-4 text-primary-foreground" />
+                    </button>
+                  </DialogTrigger>
                 <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle className="font-display">Choose Avatar</DialogTitle>
@@ -304,41 +357,68 @@ export default function Profile() {
                     Save Selected Style
                   </Button>
                 </DialogContent>
-              </Dialog>
+                </Dialog>
+              )}
               <div className={cn("absolute bottom-0 left-0 w-5 h-5 rounded-full border-3 border-background", currentStatus.color)} />
             </motion.div>
             
             <div className="flex-1 pb-2">
               <h1 className="text-3xl font-display font-bold" data-testid="text-displayname">{displayName}</h1>
               <p className="text-muted-foreground flex items-center gap-2 flex-wrap">
-                @{username} • {user.bio || "Gamer"} • 
+                @{username} • {profileUser.bio || "Gamer"} • 
                 <span className={cn("flex items-center gap-1", currentStatus.value === "online" ? "text-green-500" : "text-muted-foreground")}>
                   <span className={cn("w-2 h-2 rounded-full", currentStatus.color)} />
                   {currentStatus.label}
                 </span>
               </p>
-              {user.statusText && (
-                <p className="text-sm text-muted-foreground mt-1 italic">"{user.statusText}"</p>
+              {profileUser.statusText && (
+                <p className="text-sm text-muted-foreground mt-1 italic">"{profileUser.statusText}"</p>
               )}
             </div>
 
             <div className="flex gap-2 pb-2 w-full md:w-auto flex-wrap">
-              <Button onClick={openEditDialog} variant="outline" size="sm" data-testid="button-edit-profile">
-                <Edit2 className="w-4 h-4 mr-2" />
-                Edit Profile
-              </Button>
-              <Button onClick={() => setShowQR(!showQR)} className="bg-accent/10 text-accent hover:bg-accent/20 border border-accent/50" size="sm" data-testid="button-share-profile">
-                <Share2 className="w-4 h-4 mr-2" />
-                Share
-              </Button>
-              <Button onClick={() => window.location.href = "/api/logout"} variant="outline" size="icon" title="Sign out" data-testid="button-logout">
-                <LogOut className="w-4 h-4" />
-              </Button>
+              {isOwnProfile ? (
+                <>
+                  <Button onClick={openEditDialog} variant="outline" size="sm" data-testid="button-edit-profile">
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                  <Button onClick={() => setShowQR(!showQR)} className="bg-accent/10 text-accent hover:bg-accent/20 border border-accent/50" size="sm" data-testid="button-share-profile">
+                    <Share2 className="w-4 h-4 mr-2" />
+                    Share
+                  </Button>
+                  <Button onClick={() => window.location.href = "/api/logout"} variant="outline" size="icon" title="Sign out" data-testid="button-logout">
+                    <LogOut className="w-4 h-4" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    onClick={() => addFriendMutation.mutate()} 
+                    disabled={addFriendMutation.isPending}
+                    size="sm" 
+                    data-testid="button-add-friend-profile"
+                  >
+                    {addFriendMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                    Add Friend
+                  </Button>
+                  <Button 
+                    onClick={() => setLocation("/messages")} 
+                    variant="outline" 
+                    size="sm" 
+                    data-testid="button-message-user"
+                  >
+                    <MessageCircle className="w-4 h-4 mr-2" />
+                    Message
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        {isOwnProfile && (
+          <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle className="font-display">Edit Profile</DialogTitle>
@@ -426,8 +506,9 @@ export default function Profile() {
             </Button>
           </DialogContent>
         </Dialog>
+        )}
 
-        {showQR && (
+        {showQR && isOwnProfile && (
           <motion.div 
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
@@ -436,7 +517,7 @@ export default function Profile() {
             <Card className="bg-white/5 backdrop-blur-xl border-accent/30">
               <CardContent className="p-8 flex flex-col items-center text-center gap-6">
                 <div className="bg-white p-4 rounded-xl shadow-[0_0_30px_rgba(0,255,255,0.3)]">
-                  <QRCodeSVG value={`${window.location.origin}/profile/${user.id}`} size={200} />
+                  <QRCodeSVG value={`${window.location.origin}/profile/${profileUser.id}`} size={200} />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold font-display mb-2">Scan to add {username}</h3>
@@ -463,25 +544,27 @@ export default function Profile() {
                 <Gamepad2 className="w-5 h-5 text-primary" />
                 Games I Play
               </h3>
-              <div className="flex gap-2">
-                {user.steamId && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => syncSteamMutation.mutate()}
-                    disabled={syncSteamMutation.isPending}
-                    data-testid="button-sync-steam"
-                  >
-                    {syncSteamMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                    )}
-                    Sync Steam
-                  </Button>
-                )}
-                <AddGameDialog />
-              </div>
+              {isOwnProfile && (
+                <div className="flex gap-2">
+                  {profileUser.steamId && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => syncSteamMutation.mutate()}
+                      disabled={syncSteamMutation.isPending}
+                      data-testid="button-sync-steam"
+                    >
+                      {syncSteamMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                      )}
+                      Sync Steam
+                    </Button>
+                  )}
+                  <AddGameDialog />
+                </div>
+              )}
             </div>
             
             {gamesLoading ? (
@@ -521,15 +604,17 @@ export default function Profile() {
                           )}
                         </div>
                       </div>
-                      <button
-                        onClick={() => removeGameMutation.mutate(userGame.id)}
-                        disabled={removeGameMutation.isPending}
-                        className="md:opacity-0 md:group-hover:opacity-100 transition-opacity p-2 hover:bg-destructive/20 rounded-full"
-                        title="Remove game"
-                        data-testid={`button-remove-game-${userGame.id}`}
-                      >
-                        <X className="w-5 h-5 text-muted-foreground hover:text-destructive" />
-                      </button>
+                      {isOwnProfile && (
+                        <button
+                          onClick={() => removeGameMutation.mutate(userGame.id)}
+                          disabled={removeGameMutation.isPending}
+                          className="md:opacity-0 md:group-hover:opacity-100 transition-opacity p-2 hover:bg-destructive/20 rounded-full"
+                          title="Remove game"
+                          data-testid={`button-remove-game-${userGame.id}`}
+                        >
+                          <X className="w-5 h-5 text-muted-foreground hover:text-destructive" />
+                        </button>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -540,9 +625,9 @@ export default function Profile() {
                   <Gamepad2 className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
                   <h4 className="font-bold mb-1">No games added yet</h4>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Add the games you play to help others find you
+                    {isOwnProfile ? "Add the games you play to help others find you" : "This user hasn't added any games yet"}
                   </p>
-                  <AddGameDialog />
+                  {isOwnProfile && <AddGameDialog />}
                 </CardContent>
               </Card>
             )}

@@ -28,6 +28,7 @@ function Router() {
           <Route path="/" component={Home} />
           <Route path="/messages" component={Messages} />
           <Route path="/profile" component={Profile} />
+          <Route path="/profile/:id" component={Profile} />
           <Route path="/discover" component={Discover} />
           <Route path="/community/:id" component={CommunityDetail} />
         </>

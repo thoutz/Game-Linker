@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { LiveKitRoom, RoomAudioRenderer, useParticipants } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,7 @@ interface PostWithVoiceProps {
 
 export function PostWithVoice({ post }: PostWithVoiceProps) {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
   const [connectionData, setConnectionData] = useState<{ token: string; url: string } | null>(null);
   const [isInCall, setIsInCall] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -207,7 +209,13 @@ export function PostWithVoice({ post }: PostWithVoiceProps) {
         </Avatar>
         <div className="flex-1">
           <div className="flex items-baseline justify-between">
-            <h4 className="font-bold">{post.user.username}</h4>
+            <h4 
+              className="font-bold hover:text-primary cursor-pointer transition-colors"
+              onClick={() => setLocation(`/profile/${post.user.id}`)}
+              data-testid={`link-user-${post.user.id}`}
+            >
+              {post.user.username}
+            </h4>
             <span className="text-xs text-muted-foreground">
               {new Date(post.createdAt).toLocaleString()}
             </span>
