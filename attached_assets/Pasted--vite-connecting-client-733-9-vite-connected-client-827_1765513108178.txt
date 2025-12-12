@@ -1,0 +1,49 @@
+[vite] connecting... client:733:9
+[vite] connected. client:827:12
+In HTML, <a> cannot be a descendant of <a>.
+This will cause a hydration error.
+
+  ...
+    <QueryClientProvider data-replit-metadata="client/src..." data-component-name="QueryClien..." client={{}}>
+      <TooltipProvider data-replit-metadata="client/src..." data-component-name="TooltipPro...">
+        <TooltipProviderProvider scope={undefined} isOpenDelayedRef={{current:true}} delayDuration={700} ...>
+          <Toaster>
+          <Router data-replit-metadata="client/src..." data-component-name="Router">
+            <Switch data-replit-metadata="client/src..." data-component-name="Switch">
+              <Route data-replit-metadata="client/src..." data-component-name="Route" path="/profile" ...>
+                <Profile params={{}}>
+                  <Layout>
+                    <div data-replit-metadata="client/src..." data-component-name="div" className="min-h-scre...">
+                      <aside>
+                      <main>
+                      <div data-replit-metadata="client/src..." data-component-name="div" className="md:hidden ...">
+                        <nav data-replit-metadata="client/src..." data-component-name="nav" className="bg-card/80...">
+>                         <a
+>                           data-replit-metadata="client/src/components/layout.tsx:51:12"
+>                           data-component-name="Link"
+>                           onClick={function}
+>                           href="/"
+>                           className="relative group"
+>                           ref={null}
+>                         >
+>                           <a
+>                             data-replit-metadata="client/src/components/layout.tsx:52:14"
+>                             data-component-name="a"
+>                             className="flex flex-col items-center justify-center transition-all duration-300 text-mu..."
+>                           >
+                          ...
+ Stack: 
+    a unknown:0
+<anonymous code>:1:147461
+<a> cannot contain a nested <a>.
+See this log for the ancestor stack trace. Stack: 
+    a unknown:0
+<anonymous code>:1:147461
+Source map error: Error: JSON.parse: unexpected character at line 1 column 1 of the JSON data
+Stack in the worker:parseSourceMapInput@resource://devtools/client/shared/vendor/source-map/lib/util.js:163:15
+_factory@resource://devtools/client/shared/vendor/source-map/lib/source-map-consumer.js:1069:22
+SourceMapConsumer@resource://devtools/client/shared/vendor/source-map/lib/source-map-consumer.js:26:12
+_fetch@resource://devtools/client/shared/source-map-loader/utils/fetchSourceMap.js:83:19
+
+Resource URL: https://17a58c44-41e3-418e-957b-7ed34030a901-00-9oeo86lcvs2u.kirk.replit.dev/%3Canonymous%20code%3E
+Source Map URL: installHook.js.map

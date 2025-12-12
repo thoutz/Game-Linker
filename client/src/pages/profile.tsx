@@ -77,7 +77,7 @@ export default function Profile() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["auth-user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast.success("Profile updated!");
       setEditDialogOpen(false);
       setAvatarDialogOpen(false);

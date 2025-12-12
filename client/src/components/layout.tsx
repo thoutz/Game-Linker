@@ -48,22 +48,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[90%] max-w-sm">
         <nav className="bg-card/80 backdrop-blur-xl border border-white/10 rounded-full shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] flex items-center justify-between px-6 py-4 safe-area-pb">
           {navItems.map((item) => (
-            <Link key={item.href} href={item.href} className="relative group">
-              <a
-                className={cn(
-                  "flex flex-col items-center justify-center transition-all duration-300",
-                  location === item.href ? "text-primary -translate-y-1" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className={cn(
-                  "absolute -inset-4 bg-primary/20 rounded-full blur-xl opacity-0 transition-opacity",
-                  location === item.href && "opacity-50"
-                )} />
-                <item.icon className={cn("w-6 h-6 relative z-10 transition-transform", location === item.href && "scale-110")} />
-                {location === item.href && (
-                  <span className="absolute -bottom-3 w-1 h-1 bg-primary rounded-full" />
-                )}
-              </a>
+            <Link 
+              key={item.href} 
+              href={item.href} 
+              className={cn(
+                "relative group flex flex-col items-center justify-center transition-all duration-300",
+                location === item.href ? "text-primary -translate-y-1" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <div className={cn(
+                "absolute -inset-4 bg-primary/20 rounded-full blur-xl opacity-0 transition-opacity",
+                location === item.href && "opacity-50"
+              )} />
+              <item.icon className={cn("w-6 h-6 relative z-10 transition-transform", location === item.href && "scale-110")} />
+              {location === item.href && (
+                <span className="absolute -bottom-3 w-1 h-1 bg-primary rounded-full" />
+              )}
             </Link>
           ))}
         </nav>
