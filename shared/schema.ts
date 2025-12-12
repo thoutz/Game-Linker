@@ -16,6 +16,7 @@ export const sessions = pgTable(
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
+  displayName: text("display_name"),
   email: text("email"),
   firstName: text("first_name"),
   lastName: text("last_name"),
@@ -42,6 +43,7 @@ export const games = pgTable("games", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   icon: text("icon"),
+  steamAppId: integer("steam_app_id"),
 });
 
 export const insertGameSchema = createInsertSchema(games).omit({
