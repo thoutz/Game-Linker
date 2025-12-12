@@ -23,6 +23,7 @@ export default function CreateCommunityDialog() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [nameWasAutoSet, setNameWasAutoSet] = useState(false);
   const [description, setDescription] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [gameSearch, setGameSearch] = useState("");
@@ -69,6 +70,7 @@ export default function CreateCommunityDialog() {
 
   const resetForm = () => {
     setName("");
+    setNameWasAutoSet(false);
     setDescription("");
     setIsPrivate(false);
     setGameSearch("");
@@ -127,8 +129,9 @@ export default function CreateCommunityDialog() {
                       onClick={() => {
                         setSelectedGame(game);
                         setGameSearch("");
-                        if (!name.trim()) {
+                        if (!name.trim() || nameWasAutoSet) {
                           setName(`${game.name} Community`);
+                          setNameWasAutoSet(true);
                         }
                       }}
                       data-testid={`game-result-${game.id}`}
@@ -170,7 +173,10 @@ export default function CreateCommunityDialog() {
               id="name"
               placeholder="e.g., Arc Raiders Squad Finder"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameWasAutoSet(false);
+              }}
               data-testid="input-community-name"
             />
           </div>
