@@ -7,6 +7,10 @@ import {
   type InsertCommunity,
   type Post,
   type InsertPost,
+  type PostLike,
+  type InsertPostLike,
+  type PostComment,
+  type InsertPostComment,
   type Session,
   type InsertSession,
   type Message,
@@ -32,6 +36,8 @@ import {
   users,
   communities,
   posts,
+  postLikes,
+  postComments,
   gamingSessions,
   messages,
   friendships,
@@ -70,8 +76,16 @@ export interface IStorage {
   leaveCommunity(communityId: string, userId: string): Promise<void>;
   isMember(communityId: string, userId: string): Promise<boolean>;
   
-  getPosts(communityId: string): Promise<(Post & { user: User })[]>;
+  getPosts(communityId: string): Promise<(Post & { user: User; likeCount: number; commentCount: number })[]>;
   createPost(post: InsertPost): Promise<Post>;
+  
+  togglePostLike(postId: string, userId: string): Promise<boolean>;
+  isPostLiked(postId: string, userId: string): Promise<boolean>;
+  getPostLikeCount(postId: string): Promise<number>;
+  
+  getPostComments(postId: string): Promise<(PostComment & { user: User })[]>;
+  createPostComment(comment: InsertPostComment): Promise<PostComment>;
+  getPostCommentCount(postId: string): Promise<number>;
   
   getSessions(): Promise<(Session & { creator: User })[]>;
   getSession(id: string): Promise<Session | undefined>;
@@ -285,7 +299,7 @@ export class DatabaseStorage implements IStorage {
     return !!result;
   }
 
-  async getPosts(communityId: string): Promise<(Post & { user: User })[]> {
+  async getPosts(communityId: string): Promise<(Post & { user: User; likeCount: number; commentCount: number })[]> {
     const result = await db
       .select()
       .from(posts)
@@ -293,12 +307,75 @@ export class DatabaseStorage implements IStorage {
       .where(eq(posts.communityId, communityId))
       .orderBy(desc(posts.createdAt));
     
-    return result.map(r => ({ ...r.posts, user: r.users }));
+    const postsWithCounts = await Promise.all(
+      result.map(async (r) => {
+        const likeCount = await this.getPostLikeCount(r.posts.id);
+        const commentCount = await this.getPostCommentCount(r.posts.id);
+        return { ...r.posts, user: r.users, likeCount, commentCount };
+      })
+    );
+    
+    return postsWithCounts;
   }
 
   async createPost(post: InsertPost): Promise<Post> {
     const [result] = await db.insert(posts).values(post).returning();
     return result;
+  }
+
+  async togglePostLike(postId: string, userId: string): Promise<boolean> {
+    const existing = await db
+      .select()
+      .from(postLikes)
+      .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)));
+    
+    if (existing.length > 0) {
+      await db.delete(postLikes).where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)));
+      return false;
+    } else {
+      await db.insert(postLikes).values({ postId, userId });
+      return true;
+    }
+  }
+
+  async isPostLiked(postId: string, userId: string): Promise<boolean> {
+    const [result] = await db
+      .select()
+      .from(postLikes)
+      .where(and(eq(postLikes.postId, postId), eq(postLikes.userId, userId)));
+    return !!result;
+  }
+
+  async getPostLikeCount(postId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(postLikes)
+      .where(eq(postLikes.postId, postId));
+    return result[0]?.count || 0;
+  }
+
+  async getPostComments(postId: string): Promise<(PostComment & { user: User })[]> {
+    const result = await db
+      .select()
+      .from(postComments)
+      .innerJoin(users, eq(postComments.userId, users.id))
+      .where(eq(postComments.postId, postId))
+      .orderBy(postComments.createdAt);
+    
+    return result.map(r => ({ ...r.post_comments, user: r.users }));
+  }
+
+  async createPostComment(comment: InsertPostComment): Promise<PostComment> {
+    const [result] = await db.insert(postComments).values(comment).returning();
+    return result;
+  }
+
+  async getPostCommentCount(postId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(postComments)
+      .where(eq(postComments.postId, postId));
+    return result[0]?.count || 0;
   }
 
   async getSessions(): Promise<(Session & { creator: User })[]> {

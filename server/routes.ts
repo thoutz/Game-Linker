@@ -192,6 +192,58 @@ export async function registerRoutes(
     }
   });
 
+  // Post likes
+  app.post("/api/posts/:postId/like", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const liked = await storage.togglePostLike(req.params.postId, userId);
+      const likeCount = await storage.getPostLikeCount(req.params.postId);
+      res.json({ liked, likeCount });
+    } catch (error) {
+      console.error("Toggle like error:", error);
+      res.status(500).json({ error: "Failed to toggle like" });
+    }
+  });
+
+  app.get("/api/posts/:postId/liked", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const liked = await storage.isPostLiked(req.params.postId, userId);
+      res.json({ liked });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check like status" });
+    }
+  });
+
+  // Post comments
+  app.get("/api/posts/:postId/comments", async (req, res) => {
+    try {
+      const comments = await storage.getPostComments(req.params.postId);
+      res.json(comments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get comments" });
+    }
+  });
+
+  app.post("/api/posts/:postId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { content } = req.body;
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ error: "Comment cannot be empty" });
+      }
+      const comment = await storage.createPostComment({
+        postId: req.params.postId,
+        userId,
+        content: content.trim(),
+      });
+      res.status(201).json(comment);
+    } catch (error) {
+      console.error("Create comment error:", error);
+      res.status(500).json({ error: "Failed to create comment" });
+    }
+  });
+
   app.get("/api/sessions", async (req, res) => {
     try {
       const sessions = await storage.getSessions();
@@ -315,6 +367,13 @@ export async function registerRoutes(
       if (!game) {
         game = await storage.createGame({ name: gameName, icon: gameIcon });
       }
+      
+      // Check if user already has this game
+      const existingUserGame = await storage.getUserGameByGameId(userId, game.id);
+      if (existingUserGame) {
+        return res.status(400).json({ error: "You already have this game in your profile" });
+      }
+      
       const userGame = await storage.addUserGame({
         userId,
         gameId: game.id,

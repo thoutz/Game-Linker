@@ -5,7 +5,10 @@ import "@livekit/components-styles";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
-import { Mic, MicOff, PhoneOff, Users, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Mic, MicOff, PhoneOff, Users, Loader2, Heart, MessageCircle, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -14,10 +17,25 @@ interface Post {
   id: string;
   content: string;
   createdAt: string;
+  likeCount?: number;
+  commentCount?: number;
   user: {
     id: string;
     username: string;
     avatar?: string;
+    profileImageUrl?: string;
+  };
+}
+
+interface Comment {
+  id: string;
+  content: string;
+  createdAt: string;
+  user: {
+    id: string;
+    username: string;
+    avatar?: string;
+    profileImageUrl?: string;
   };
 }
 
@@ -46,7 +64,70 @@ export function PostWithVoice({ post }: PostWithVoiceProps) {
   const { user } = useAuth();
   const [connectionData, setConnectionData] = useState<{ token: string; url: string } | null>(null);
   const [isInCall, setIsInCall] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [likeCount, setLikeCount] = useState(post.likeCount || 0);
+  const [isLiked, setIsLiked] = useState(false);
   const queryClient = useQueryClient();
+
+  const { data: likedStatus } = useQuery({
+    queryKey: ["postLiked", post.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/liked`);
+      if (!res.ok) return { liked: false };
+      return res.json();
+    },
+    enabled: !!user,
+  });
+
+  if (likedStatus && likedStatus.liked !== isLiked) {
+    setIsLiked(likedStatus.liked);
+  }
+
+  const { data: comments, refetch: refetchComments } = useQuery<Comment[]>({
+    queryKey: ["postComments", post.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/comments`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: commentsOpen,
+  });
+
+  const likeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to toggle like");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setIsLiked(data.liked);
+      setLikeCount(data.likeCount);
+    },
+    onError: () => {
+      toast.error("Failed to like post");
+    },
+  });
+
+  const commentMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await fetch(`/api/posts/${post.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) throw new Error("Failed to add comment");
+      return res.json();
+    },
+    onSuccess: () => {
+      setNewComment("");
+      refetchComments();
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+    onError: () => {
+      toast.error("Failed to add comment");
+    },
+  });
 
   const { data: voiceChannel, isLoading: voiceLoading } = useQuery<PostVoiceChannel | null>({
     queryKey: ["postVoiceChannel", post.id],
@@ -121,7 +202,7 @@ export function PostWithVoice({ post }: PostWithVoiceProps) {
     <div className="bg-card/30 border border-border/50 rounded-xl p-4 hover:border-primary/20 transition-colors">
       <div className="flex items-start gap-3">
         <Avatar>
-          <AvatarImage src={post.user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user.username}`} />
+          <AvatarImage src={post.user.profileImageUrl || post.user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user.username}`} />
           <AvatarFallback>{post.user.username[0]}</AvatarFallback>
         </Avatar>
         <div className="flex-1">
@@ -205,16 +286,85 @@ export function PostWithVoice({ post }: PostWithVoiceProps) {
             </Card>
           )}
 
-          {!voiceChannel && !voiceLoading && (
-            <div className="flex gap-4 mt-3">
-              <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-primary">
-                Likes (0)
-              </Button>
-              <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-primary">
-                Comments (0)
-              </Button>
-            </div>
-          )}
+          <div className="flex gap-4 mt-3">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className={cn("h-8", isLiked ? "text-red-500" : "text-muted-foreground hover:text-red-500")}
+              onClick={() => user && likeMutation.mutate()}
+              disabled={!user || likeMutation.isPending}
+              data-testid={`button-like-${post.id}`}
+            >
+              <Heart className={cn("w-4 h-4 mr-1", isLiked && "fill-current")} />
+              {likeCount}
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 text-muted-foreground hover:text-primary"
+              onClick={() => setCommentsOpen(true)}
+              data-testid={`button-comments-${post.id}`}
+            >
+              <MessageCircle className="w-4 h-4 mr-1" />
+              {post.commentCount || 0}
+            </Button>
+          </div>
+
+          <Dialog open={commentsOpen} onOpenChange={setCommentsOpen}>
+            <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Comments</DialogTitle>
+              </DialogHeader>
+              <ScrollArea className="flex-1 max-h-[50vh] pr-4">
+                {comments && comments.length > 0 ? (
+                  <div className="space-y-4">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-3">
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={comment.user.profileImageUrl || comment.user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.user.username}`} />
+                          <AvatarFallback>{comment.user.username[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-medium text-sm">{comment.user.username}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(comment.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-sm mt-1">{comment.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">No comments yet</p>
+                )}
+              </ScrollArea>
+              {user && (
+                <div className="flex gap-2 mt-4 pt-4 border-t">
+                  <Input
+                    placeholder="Add a comment..."
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newComment.trim()) {
+                        commentMutation.mutate(newComment.trim());
+                      }
+                    }}
+                    data-testid="input-comment"
+                  />
+                  <Button
+                    size="icon"
+                    onClick={() => newComment.trim() && commentMutation.mutate(newComment.trim())}
+                    disabled={!newComment.trim() || commentMutation.isPending}
+                    data-testid="button-send-comment"
+                  >
+                    {commentMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </Button>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>

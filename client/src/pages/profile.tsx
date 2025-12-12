@@ -524,11 +524,11 @@ export default function Profile() {
                       <button
                         onClick={() => removeGameMutation.mutate(userGame.id)}
                         disabled={removeGameMutation.isPending}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/20 rounded-full"
+                        className="md:opacity-0 md:group-hover:opacity-100 transition-opacity p-2 hover:bg-destructive/20 rounded-full"
                         title="Remove game"
                         data-testid={`button-remove-game-${userGame.id}`}
                       >
-                        <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                        <X className="w-5 h-5 text-muted-foreground hover:text-destructive" />
                       </button>
                     </CardContent>
                   </Card>
