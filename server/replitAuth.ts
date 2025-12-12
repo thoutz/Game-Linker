@@ -79,39 +79,45 @@ export async function setupAuth(app: Express) {
     verified(null, user);
   };
 
-  const registeredStrategies = new Set<string>();
+  const registeredStrategies = new Map<string, string>();
 
-  const ensureStrategy = (domain: string) => {
-    const strategyName = `replitauth:${domain}`;
-    if (!registeredStrategies.has(strategyName)) {
+  const ensureStrategy = (req: any) => {
+    const protocol = req.protocol;
+    const host = req.get("host");
+    const callbackURL = `${protocol}://${host}/api/callback`;
+    const strategyKey = `${protocol}://${host}`;
+    const strategyName = `replitauth:${strategyKey}`;
+    
+    if (!registeredStrategies.has(strategyKey)) {
       const strategy = new Strategy(
         {
           name: strategyName,
           config,
           scope: "openid email profile offline_access",
-          callbackURL: `https://${domain}/api/callback`,
+          callbackURL,
         },
         verify,
       );
       passport.use(strategy);
-      registeredStrategies.add(strategyName);
+      registeredStrategies.set(strategyKey, strategyName);
     }
+    return registeredStrategies.get(strategyKey)!;
   };
 
   passport.serializeUser((user: Express.User, cb) => cb(null, user));
   passport.deserializeUser((user: Express.User, cb) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const strategyName = ensureStrategy(req);
+    passport.authenticate(strategyName, {
       prompt: "login consent",
       scope: ["openid", "email", "profile", "offline_access"],
     })(req, res, next);
   });
 
   app.get("/api/callback", (req, res, next) => {
-    ensureStrategy(req.hostname);
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const strategyName = ensureStrategy(req);
+    passport.authenticate(strategyName, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
     })(req, res, next);
