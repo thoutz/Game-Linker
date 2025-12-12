@@ -3,18 +3,19 @@ import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/layout";
+import { VoiceChannelList } from "@/components/voice-channel";
+import { CreatePostWithVoice } from "@/components/create-post-with-voice";
+import { PostWithVoice } from "@/components/post-with-voice";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Users, Lock, MessageSquare, Calendar, Hash } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, Users, Lock, MessageSquare, Calendar, Hash, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function CommunityDetail({ params }: { params: { id: string } }) {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const [newPostContent, setNewPostContent] = useState("");
   const queryClient = useQueryClient();
 
   const { data: community, isLoading: communityLoading } = useQuery({
@@ -78,28 +79,6 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
       queryClient.invalidateQueries({ queryKey: ["membership", params.id, user?.id] });
       queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
       toast.success("Left community");
-    },
-  });
-
-  const postMutation = useMutation({
-    mutationFn: async (content: string) => {
-      if (!user?.id) throw new Error("Not authenticated");
-      const response = await fetch("/api/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          communityId: params.id,
-          userId: user.id,
-          content,
-        }),
-      });
-      if (!response.ok) throw new Error("Failed to post");
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
-      setNewPostContent("");
-      toast.success("Posted successfully!");
     },
   });
 
@@ -178,7 +157,7 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
             </div>
 
             <div className="bg-card/30 border border-border/50 rounded-xl p-4 backdrop-blur-md">
-              <h3 className="font-bold mb-4 flex items-center"><Hash className="w-4 h-4 mr-2 text-primary" /> Channels</h3>
+              <h3 className="font-bold mb-4 flex items-center"><Hash className="w-4 h-4 mr-2 text-primary" /> Text Channels</h3>
               <div className="space-y-1">
                 {["general", "lfg-raid", "builds", "clips"].map((channel) => (
                   <Button key={channel} variant="ghost" size="sm" className="w-full justify-start text-muted-foreground hover:text-primary hover:bg-primary/10">
@@ -186,6 +165,10 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
                   </Button>
                 ))}
               </div>
+            </div>
+
+            <div className="bg-card/30 border border-border/50 rounded-xl p-4 backdrop-blur-md">
+              <VoiceChannelList communityId={params.id} isMember={!!isMember} />
             </div>
           </div>
 
@@ -199,30 +182,8 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
               </TabsList>
               
               <TabsContent value="discussion" className="mt-6 space-y-4">
-                {isMember && (
-                  <div className="bg-card/30 border border-border/50 rounded-xl p-4 flex gap-4">
-                    <Avatar>
-                      <AvatarImage src={user?.profileImageUrl || user?.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.username}`} />
-                      <AvatarFallback>{user?.username?.[0]?.toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <Textarea 
-                        value={newPostContent}
-                        onChange={(e) => setNewPostContent(e.target.value)}
-                        placeholder="Share something with the community..." 
-                        className="bg-transparent border-none focus:outline-none text-foreground placeholder:text-muted-foreground resize-none min-h-[60px]"
-                      />
-                      <div className="flex justify-end mt-2">
-                        <Button 
-                          size="sm" 
-                          onClick={() => newPostContent && postMutation.mutate(newPostContent)}
-                          disabled={!newPostContent || postMutation.isPending}
-                        >
-                          Post
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                {isMember && user && (
+                  <CreatePostWithVoice communityId={params.id} user={user} />
                 )}
 
                 {!isMember && (
@@ -234,31 +195,7 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
 
                 {/* Posts Feed */}
                 {posts && posts.map((post: any) => (
-                  <div key={post.id} className="bg-card/30 border border-border/50 rounded-xl p-4 hover:border-primary/20 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <Avatar>
-                        <AvatarImage src={post.user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.user.username}`} />
-                        <AvatarFallback>{post.user.username[0]}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <div className="flex items-baseline justify-between">
-                          <h4 className="font-bold">{post.user.username}</h4>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(post.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-sm">{post.content}</p>
-                        <div className="flex gap-4 mt-3">
-                          <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-primary">
-                            Likes (0)
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-primary">
-                            Comments (0)
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <PostWithVoice key={post.id} post={post} />
                 ))}
               </TabsContent>
               

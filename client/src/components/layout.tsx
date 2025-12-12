@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Home, MessageSquare, Users, User, Gamepad2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "./notification-center";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -19,6 +20,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="text-primary p-2 bg-primary/10 rounded-xl shadow-[0_0_20px_rgba(139,47,201,0.2)]">
           <Gamepad2 className="w-8 h-8" />
         </div>
+        <NotificationBell />
         <nav className="flex flex-col gap-4 w-full items-center">
           {navItems.map((item) => (
             <Link key={item.href} href={item.href} className={cn(
