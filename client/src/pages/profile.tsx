@@ -135,7 +135,7 @@ export default function Profile() {
 
   const handleSaveAvatar = (style: string) => {
     const newAvatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${user?.username}`;
-    updateProfileMutation.mutate({ avatar: newAvatarUrl });
+    updateProfileMutation.mutate({ avatar: newAvatarUrl, profileImageUrl: newAvatarUrl });
   };
 
   const openEditDialog = () => {
