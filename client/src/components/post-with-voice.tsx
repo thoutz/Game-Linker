@@ -69,7 +69,7 @@ export function PostWithVoice({ post }: PostWithVoiceProps) {
   const joinMutation = useMutation({
     mutationFn: async () => {
       if (!voiceChannel) throw new Error("No voice channel");
-      const res = await fetch(`/api/post-voice-channels/${post.id}/join`, {
+      const res = await fetch(`/api/post-voice-channels/${voiceChannel.id}/join`, {
         method: "POST",
       });
       if (!res.ok) {
