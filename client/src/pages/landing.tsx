@@ -2,15 +2,19 @@ import { Button } from "@/components/ui/button";
 import { Gamepad2, Users, MessageSquare, Calendar, QrCode } from "lucide-react";
 
 export default function Landing() {
+  const handleLogin = () => {
+    window.location.href = "/api/login";
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <header className="p-6 flex items-center justify-between border-b border-border/50">
         <h1 className="text-2xl font-display font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-primary">
           Nexus
         </h1>
-        <a href="/api/login">
-          <Button className="bg-primary hover:bg-primary/90">Sign In</Button>
-        </a>
+        <Button onClick={handleLogin} className="bg-primary hover:bg-primary/90" data-testid="button-signin-header">
+          Sign In
+        </Button>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-6 text-center">
@@ -24,12 +28,15 @@ export default function Landing() {
             </p>
           </div>
 
-          <a href="/api/login">
-            <Button size="lg" className="bg-primary hover:bg-primary/90 text-lg px-8 py-6 shadow-[0_0_30px_rgba(139,47,201,0.4)]">
-              <Gamepad2 className="w-5 h-5 mr-2" />
-              Get Started
-            </Button>
-          </a>
+          <Button 
+            onClick={handleLogin} 
+            size="lg" 
+            className="bg-primary hover:bg-primary/90 text-lg px-8 py-6 shadow-[0_0_30px_rgba(139,47,201,0.4)]"
+            data-testid="button-get-started"
+          >
+            <Gamepad2 className="w-5 h-5 mr-2" />
+            Get Started
+          </Button>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 pt-12">
             <div className="flex flex-col items-center gap-3 p-4">
