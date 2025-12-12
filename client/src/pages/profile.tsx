@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/layout";
 import AddGameDialog from "@/components/add-game-dialog";
@@ -7,9 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2 } from "lucide-react";
-import { useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Share2, Edit2, Copy, Check, Trophy, Clock, LogOut, Gamepad2, Camera, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface UserGame {
   id: string;
@@ -24,10 +30,29 @@ interface UserGame {
   };
 }
 
+const STATUS_OPTIONS = [
+  { value: "online", label: "Online", color: "bg-green-500" },
+  { value: "away", label: "Away", color: "bg-yellow-500" },
+  { value: "busy", label: "Busy", color: "bg-red-500" },
+  { value: "offline", label: "Invisible", color: "bg-gray-500" },
+];
+
+const AVATAR_STYLES = [
+  "avataaars", "bottts", "fun-emoji", "lorelei", "notionists", 
+  "open-peeps", "personas", "pixel-art", "adventurer"
+];
+
 export default function Profile() {
   const { user, isLoading } = useAuth();
   const [showQR, setShowQR] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
+  const [editBio, setEditBio] = useState("");
+  const [editStatusText, setEditStatusText] = useState("");
+  const [editStatus, setEditStatus] = useState("online");
+  const [selectedAvatarStyle, setSelectedAvatarStyle] = useState("avataaars");
+  const queryClient = useQueryClient();
 
   const { data: userGames, isLoading: gamesLoading } = useQuery({
     queryKey: ["userGames", user?.id],
@@ -40,12 +65,61 @@ export default function Profile() {
     enabled: !!user?.id,
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { bio?: string; status?: string; statusText?: string; avatar?: string }) => {
+      if (!user?.id) throw new Error("Not authenticated");
+      const response = await fetch(`/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) throw new Error("Failed to update profile");
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["auth-user"] });
+      toast.success("Profile updated!");
+      setEditDialogOpen(false);
+      setAvatarDialogOpen(false);
+    },
+    onError: () => {
+      toast.error("Failed to update profile");
+    },
+  });
+
   const handleCopy = () => {
     if (user?.username) {
       navigator.clipboard.writeText(user.username);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleSaveProfile = () => {
+    updateProfileMutation.mutate({
+      bio: editBio,
+      status: editStatus,
+      statusText: editStatusText,
+    });
+  };
+
+  const handleSaveAvatar = (style: string) => {
+    const newAvatarUrl = `https://api.dicebear.com/7.x/${style}/svg?seed=${user?.username}`;
+    updateProfileMutation.mutate({ avatar: newAvatarUrl });
+  };
+
+  const openEditDialog = () => {
+    setEditBio(user?.bio || "");
+    setEditStatusText(user?.statusText || "");
+    setEditStatus(user?.status || "online");
+    setEditDialogOpen(true);
+  };
+
+  const openAvatarDialog = () => {
+    const currentAvatar = user?.avatar || "";
+    const matchedStyle = AVATAR_STYLES.find(style => currentAvatar.includes(style));
+    setSelectedAvatarStyle(matchedStyle || "avataaars");
+    setAvatarDialogOpen(true);
   };
 
   if (isLoading) {
@@ -65,9 +139,9 @@ export default function Profile() {
         <div className="max-w-3xl mx-auto text-center py-16">
           <h1 className="text-3xl font-display font-bold mb-4">Sign in to view your profile</h1>
           <p className="text-muted-foreground mb-8">Create an account or sign in to start connecting with other gamers.</p>
-          <a href="/api/login">
-            <Button className="bg-primary" data-testid="button-signin">Sign In</Button>
-          </a>
+          <Button onClick={() => window.location.href = "/api/login"} className="bg-primary" data-testid="button-signin">
+            Sign In
+          </Button>
         </div>
       </Layout>
     );
@@ -76,6 +150,7 @@ export default function Profile() {
   const username = user.username;
   const displayName = user.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : username;
   const avatarUrl = user.profileImageUrl || user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`;
+  const currentStatus = STATUS_OPTIONS.find(s => s.value === user.status) || STATUS_OPTIONS[0];
 
   return (
     <Layout>
@@ -89,37 +164,154 @@ export default function Profile() {
             <motion.div 
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="relative"
+              className="relative group"
             >
               <Avatar className="w-32 h-32 border-4 border-background shadow-xl">
                 <AvatarImage src={avatarUrl} className="object-cover" />
                 <AvatarFallback>{username.substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
-              <div className="absolute bottom-2 right-2 bg-background p-1.5 rounded-full shadow-sm border border-border">
-                <Edit2 className="w-4 h-4 text-muted-foreground" />
-              </div>
+              <Dialog open={avatarDialogOpen} onOpenChange={setAvatarDialogOpen}>
+                <DialogTrigger asChild>
+                  <button 
+                    onClick={openAvatarDialog}
+                    className="absolute bottom-2 right-2 bg-primary p-2 rounded-full shadow-lg border-2 border-background hover:bg-primary/90 transition-colors" 
+                    data-testid="button-change-avatar"
+                  >
+                    <Camera className="w-4 h-4 text-primary-foreground" />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle className="font-display">Choose Avatar Style</DialogTitle>
+                  </DialogHeader>
+                  <div className="grid grid-cols-3 gap-4 py-4">
+                    {AVATAR_STYLES.map((style) => (
+                      <button
+                        key={style}
+                        onClick={() => setSelectedAvatarStyle(style)}
+                        className={cn(
+                          "p-2 rounded-xl border-2 transition-all hover:scale-105",
+                          selectedAvatarStyle === style 
+                            ? "border-primary bg-primary/10" 
+                            : "border-border/50 hover:border-primary/50"
+                        )}
+                        data-testid={`avatar-style-${style}`}
+                      >
+                        <img 
+                          src={`https://api.dicebear.com/7.x/${style}/svg?seed=${username}`}
+                          alt={style}
+                          className="w-full aspect-square rounded-lg"
+                        />
+                        <p className="text-xs text-center mt-1 capitalize">{style.replace("-", " ")}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <Button 
+                    onClick={() => handleSaveAvatar(selectedAvatarStyle)} 
+                    className="w-full"
+                    disabled={updateProfileMutation.isPending}
+                    data-testid="button-save-avatar"
+                  >
+                    {updateProfileMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Save Avatar
+                  </Button>
+                </DialogContent>
+              </Dialog>
+              <div className={cn("absolute bottom-0 left-0 w-5 h-5 rounded-full border-3 border-background", currentStatus.color)} />
             </motion.div>
             
             <div className="flex-1 pb-2">
               <h1 className="text-3xl font-display font-bold" data-testid="text-displayname">{displayName}</h1>
-              <p className="text-muted-foreground flex items-center gap-2">
-                @{username} • {user.bio || "Gamer"} • <span className="text-green-500">Online</span>
+              <p className="text-muted-foreground flex items-center gap-2 flex-wrap">
+                @{username} • {user.bio || "Gamer"} • 
+                <span className={cn("flex items-center gap-1", currentStatus.value === "online" ? "text-green-500" : "text-muted-foreground")}>
+                  <span className={cn("w-2 h-2 rounded-full", currentStatus.color)} />
+                  {currentStatus.label}
+                </span>
               </p>
+              {user.statusText && (
+                <p className="text-sm text-muted-foreground mt-1 italic">"{user.statusText}"</p>
+              )}
             </div>
 
-            <div className="flex gap-2 pb-2 w-full md:w-auto">
-              <Button onClick={() => setShowQR(!showQR)} className="flex-1 md:flex-none bg-accent/10 text-accent hover:bg-accent/20 border border-accent/50" data-testid="button-share-profile">
-                <Share2 className="w-4 h-4 mr-2" />
-                Share Profile
+            <div className="flex gap-2 pb-2 w-full md:w-auto flex-wrap">
+              <Button onClick={openEditDialog} variant="outline" size="sm" data-testid="button-edit-profile">
+                <Edit2 className="w-4 h-4 mr-2" />
+                Edit Profile
               </Button>
-              <a href="/api/logout">
-                <Button variant="outline" size="icon" title="Sign out" data-testid="button-logout">
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              </a>
+              <Button onClick={() => setShowQR(!showQR)} className="bg-accent/10 text-accent hover:bg-accent/20 border border-accent/50" size="sm" data-testid="button-share-profile">
+                <Share2 className="w-4 h-4 mr-2" />
+                Share
+              </Button>
+              <Button onClick={() => window.location.href = "/api/logout"} variant="outline" size="icon" title="Sign out" data-testid="button-logout">
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         </div>
+
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display">Edit Profile</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="bio">Bio</Label>
+                <Textarea
+                  id="bio"
+                  placeholder="Tell other gamers about yourself..."
+                  value={editBio}
+                  onChange={(e) => setEditBio(e.target.value)}
+                  rows={3}
+                  data-testid="input-bio"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="statusText">Status Message</Label>
+                <Input
+                  id="statusText"
+                  placeholder="What are you up to?"
+                  value={editStatusText}
+                  onChange={(e) => setEditStatusText(e.target.value)}
+                  data-testid="input-status-text"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <div className="flex gap-2 flex-wrap">
+                  {STATUS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setEditStatus(option.value)}
+                      className={cn(
+                        "px-3 py-2 rounded-lg border flex items-center gap-2 transition-all",
+                        editStatus === option.value
+                          ? "border-primary bg-primary/10"
+                          : "border-border/50 hover:border-primary/50"
+                      )}
+                      data-testid={`status-${option.value}`}
+                    >
+                      <span className={cn("w-3 h-3 rounded-full", option.color)} />
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <Button 
+              onClick={handleSaveProfile} 
+              className="w-full"
+              disabled={updateProfileMutation.isPending}
+              data-testid="button-save-profile"
+            >
+              {updateProfileMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Save Changes
+            </Button>
+          </DialogContent>
+        </Dialog>
 
         {showQR && (
           <motion.div 

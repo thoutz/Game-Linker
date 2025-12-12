@@ -44,6 +44,8 @@ export interface IStorage {
   removeFriend(userId: string, friendId: string): Promise<void>;
   
   getCommunities(): Promise<Community[]>;
+  getCommunitiesWithMemberCount(): Promise<(Community & { memberCount: number })[]>;
+  getCommunityMemberCount(communityId: string): Promise<number>;
   getCommunity(id: string): Promise<Community | undefined>;
   createCommunity(community: InsertCommunity): Promise<Community>;
   getCommunityMembers(communityId: string): Promise<User[]>;
@@ -139,6 +141,35 @@ export class DatabaseStorage implements IStorage {
 
   async getCommunities(): Promise<Community[]> {
     return db.select().from(communities).orderBy(desc(communities.createdAt));
+  }
+
+  async getCommunitiesWithMemberCount(): Promise<(Community & { memberCount: number })[]> {
+    const allCommunities = await db.select().from(communities).orderBy(desc(communities.createdAt));
+    
+    if (allCommunities.length === 0) return [];
+    
+    const memberCounts = await db
+      .select({
+        communityId: communityMembers.communityId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(communityMembers)
+      .groupBy(communityMembers.communityId);
+    
+    const countMap = new Map(memberCounts.map(mc => [mc.communityId, mc.count]));
+    
+    return allCommunities.map(community => ({
+      ...community,
+      memberCount: countMap.get(community.id) || 0,
+    }));
+  }
+
+  async getCommunityMemberCount(communityId: string): Promise<number> {
+    const members = await db
+      .select()
+      .from(communityMembers)
+      .where(eq(communityMembers.communityId, communityId));
+    return members.length;
   }
 
   async getCommunity(id: string): Promise<Community | undefined> {

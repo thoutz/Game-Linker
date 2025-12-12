@@ -85,7 +85,7 @@ export async function registerRoutes(
 
   app.get("/api/communities", async (req, res) => {
     try {
-      const communities = await storage.getCommunities();
+      const communities = await storage.getCommunitiesWithMemberCount();
       res.json(communities);
     } catch (error) {
       res.status(500).json({ error: "Failed to get communities" });

@@ -71,7 +71,7 @@ export default function Discover() {
                     <CommunityCard 
                       name={community.name} 
                       game={community.game} 
-                      members={0} 
+                      members={community.memberCount || 0} 
                       description={community.description || ""}
                       image={community.image || "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=2670"}
                       isPrivate={community.isPrivate}
