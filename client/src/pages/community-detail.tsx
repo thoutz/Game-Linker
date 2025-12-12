@@ -47,6 +47,15 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
     enabled: !!isMember,
   });
 
+  const { data: members } = useQuery({
+    queryKey: ["communityMembers", params.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/communities/${params.id}/members`);
+      if (!response.ok) return [];
+      return response.json();
+    },
+  });
+
   const joinMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id) throw new Error("Not authenticated");
@@ -61,6 +70,7 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["membership", params.id, user?.id] });
       queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["communityMembers", params.id] });
       toast.success("Joined community successfully!");
     },
   });
@@ -78,6 +88,7 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["membership", params.id, user?.id] });
       queryClient.invalidateQueries({ queryKey: ["posts", params.id] });
+      queryClient.invalidateQueries({ queryKey: ["communityMembers", params.id] });
       toast.success("Left community");
     },
   });
@@ -143,17 +154,25 @@ export default function CommunityDetail({ params }: { params: { id: string } }) 
             <div className="bg-card/30 border border-border/50 rounded-xl p-4 backdrop-blur-md">
               <h3 className="font-bold mb-4 flex items-center"><Users className="w-4 h-4 mr-2 text-primary" /> Members</h3>
               <div className="flex items-center -space-x-2 overflow-hidden mb-3">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Avatar key={i} className="inline-block border-2 border-background w-8 h-8">
-                    <AvatarImage src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${i}`} />
-                    <AvatarFallback>U</AvatarFallback>
-                  </Avatar>
-                ))}
-                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs border-2 border-background">
-                  +1k
-                </div>
+                {members && members.length > 0 ? (
+                  <>
+                    {members.slice(0, 5).map((member: any) => (
+                      <Avatar key={member.id} className="inline-block border-2 border-background w-8 h-8">
+                        <AvatarImage src={member.profileImageUrl || member.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${member.username}`} />
+                        <AvatarFallback>{member.username?.[0] || "U"}</AvatarFallback>
+                      </Avatar>
+                    ))}
+                    {members.length > 5 && (
+                      <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs border-2 border-background">
+                        +{members.length - 5}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No members yet</p>
+                )}
               </div>
-              <p className="text-sm text-muted-foreground">1,240 gamers</p>
+              <p className="text-sm text-muted-foreground">{members?.length || 0} {members?.length === 1 ? "gamer" : "gamers"}</p>
             </div>
 
             <div className="bg-card/30 border border-border/50 rounded-xl p-4 backdrop-blur-md">
